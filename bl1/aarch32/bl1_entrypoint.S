@@ -1,16 +1,16 @@
 /*
- * Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl_common.h>
+#include <common/bl_common.h>
 #include <context.h>
 #include <el3_common_macros.S>
-#include <smcc_helpers.h>
-#include <smcc_macros.S>
+#include <smccc_helpers.h>
+#include <smccc_macros.S>
 
 	.globl	bl1_vector_table
 	.globl	bl1_entrypoint

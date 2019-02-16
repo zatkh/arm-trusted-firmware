@@ -14,27 +14,28 @@
  * handle the request locally or delegate it to the Secure Payload. It is also
  * responsible for initialising and maintaining communication with the SP.
  ******************************************************************************/
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bl31.h>
-#include <bl_common.h>
-#include <context_mgmt.h>
-#include <debug.h>
 #include <errno.h>
-#include <platform.h>
-#include <runtime_svc.h>
 #include <stddef.h>
-#include <uuid.h>
+
+#include <arch_helpers.h>
+#include <bl31/bl31.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <plat/common/platform.h>
+#include <tools_share/uuid.h>
+
 #include "opteed_private.h"
 #include "teesmc_opteed.h"
 #include "teesmc_opteed_macros.h"
-
 
 /*******************************************************************************
  * Address of the entrypoint vector table in OPTEE. It is
  * initialised once on the primary core after a cold boot.
  ******************************************************************************/
-optee_vectors_t *optee_vectors;
+struct optee_vectors *optee_vector_table;
 
 /*******************************************************************************
  * Array to keep track of per-cpu OPTEE state
@@ -71,7 +72,7 @@ static uint64_t opteed_sel1_interrupt_handler(uint32_t id,
 	optee_ctx = &opteed_sp_context[linear_id];
 	assert(&optee_ctx->cpu_ctx == cm_get_context(SECURE));
 
-	cm_set_elr_el3(SECURE, (uint64_t)&optee_vectors->fiq_entry);
+	cm_set_elr_el3(SECURE, (uint64_t)&optee_vector_table->fiq_entry);
 	cm_el1_sysregs_context_restore(SECURE);
 	cm_set_next_eret_context(SECURE);
 
@@ -90,7 +91,7 @@ static uint64_t opteed_sel1_interrupt_handler(uint32_t id,
  * (aarch32/aarch64) if not already known and initialises the context for entry
  * into OPTEE for its initialization.
  ******************************************************************************/
-int32_t opteed_setup(void)
+static int32_t opteed_setup(void)
 {
 	entry_point_info_t *optee_ep_info;
 	uint32_t linear_id;
@@ -187,14 +188,14 @@ static int32_t opteed_init(void)
  * state. Lastly it will also return any information that OPTEE needs to do
  * the work assigned to it.
  ******************************************************************************/
-uint64_t opteed_smc_handler(uint32_t smc_fid,
-			 uint64_t x1,
-			 uint64_t x2,
-			 uint64_t x3,
-			 uint64_t x4,
+static uintptr_t opteed_smc_handler(uint32_t smc_fid,
+			 u_register_t x1,
+			 u_register_t x2,
+			 u_register_t x3,
+			 u_register_t x4,
 			 void *cookie,
 			 void *handle,
-			 uint64_t flags)
+			 u_register_t flags)
 {
 	cpu_context_t *ns_cpu_context;
 	uint32_t linear_id = plat_my_core_pos();
@@ -236,10 +237,10 @@ uint64_t opteed_smc_handler(uint32_t smc_fid,
 		 */
 		if (GET_SMC_TYPE(smc_fid) == SMC_TYPE_FAST) {
 			cm_set_elr_el3(SECURE, (uint64_t)
-					&optee_vectors->fast_smc_entry);
+					&optee_vector_table->fast_smc_entry);
 		} else {
 			cm_set_elr_el3(SECURE, (uint64_t)
-					&optee_vectors->yield_smc_entry);
+					&optee_vector_table->yield_smc_entry);
 		}
 
 		cm_el1_sysregs_context_restore(SECURE);
@@ -279,10 +280,10 @@ uint64_t opteed_smc_handler(uint32_t smc_fid,
 		 * Stash the OPTEE entry points information. This is done
 		 * only once on the primary cpu
 		 */
-		assert(optee_vectors == NULL);
-		optee_vectors = (optee_vectors_t *) x1;
+		assert(optee_vector_table == NULL);
+		optee_vector_table = (optee_vectors_t *) x1;
 
-		if (optee_vectors) {
+		if (optee_vector_table) {
 			set_optee_pstate(optee_ctx->state, OPTEE_PSTATE_ON);
 
 			/*
@@ -311,6 +312,7 @@ uint64_t opteed_smc_handler(uint32_t smc_fid,
 		 * OPTEE. Jump back to the original C runtime context.
 		 */
 		opteed_synchronous_sp_exit(optee_ctx, x1);
+		break;
 
 
 	/*
@@ -345,6 +347,7 @@ uint64_t opteed_smc_handler(uint32_t smc_fid,
 		 * return value to the caller
 		 */
 		opteed_synchronous_sp_exit(optee_ctx, x1);
+		break;
 
 	/*
 	 * OPTEE is returning from a call or being preempted from a call, in

@@ -1,12 +1,12 @@
-ARM Trusted Firmware for Xilinx Zynq UltraScale+ MPSoC
-======================================================
+Trusted Firmware-A for Xilinx Zynq UltraScale+ MPSoC
+====================================================
 
-ARM Trusted Firmware implements the EL3 firmware layer for Xilinx Zynq
+Trusted Firmware-A (TF-A) implements the EL3 firmware layer for Xilinx Zynq
 UltraScale + MPSoC.
-The platform only uses the runtime part of ATF as ZynqMP already has a
+The platform only uses the runtime part of TF-A as ZynqMP already has a
 BootROM (BL1) and FSBL (BL2).
 
-BL31 is ATF.
+BL31 is TF-A.
 BL32 is an optional Secure Payload.
 BL33 is the non-secure world software (U-Boot, Linux etc).
 
@@ -14,13 +14,13 @@ To build:
 
 .. code:: bash
 
-    make ERROR_DEPRECATED=1 CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp bl31
+    make CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp bl31
 
 To build bl32 TSP you have to rebuild bl31 too:
 
 .. code:: bash
 
-    make ERROR_DEPRECATED=1 CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp SPD=tspd bl31 bl32
+    make CROSS_COMPILE=aarch64-none-elf- PLAT=zynqmp SPD=tspd bl31 bl32
 
 ZynqMP platform specific build options
 ======================================
@@ -35,20 +35,20 @@ ZynqMP platform specific build options
    -  ``cadence``, ``cadence0``: Cadence UART 0
    -  ``cadence1`` : Cadence UART 1
 
-FSBL->ATF Parameter Passing
+FSBL->TF-A Parameter Passing
 ===========================
 
-The FSBL populates a data structure with image information for the ATF. The ATF
-uses that data to hand off to the loaded images. The address of the handoff data
+The FSBL populates a data structure with image information for TF-A. TF-A uses
+that data to hand off to the loaded images. The address of the handoff data
 structure is passed in the ``PMU_GLOBAL.GLOBAL_GEN_STORAGE6`` register. The
-register is free to be used by other software once the ATF is bringing up
+register is free to be used by other software once TF-A has brought up
 further firmware images.
 
 Power Domain Tree
 =================
 
-The following power domain tree represents the power domain model used by the
-ATF for ZynqMP:
+The following power domain tree represents the power domain model used by TF-A
+for ZynqMP:
 
 ::
 

@@ -4,29 +4,32 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bakery_lock.h>
-#include <bl31.h>
-#include <debug.h>
-#include <delay_timer.h>
-#include <dfs.h>
 #include <errno.h>
-#include <gicv3.h>
-#include <gpio.h>
+#include <string.h>
+
+#include <platform_def.h>
+
+#include <arch_helpers.h>
+#include <bl31/bl31.h>
+#include <common/debug.h>
+#include <drivers/arm/gicv3.h>
+#include <drivers/delay_timer.h>
+#include <drivers/gpio.h>
+#include <lib/bakery_lock.h>
+#include <lib/mmio.h>
+#include <plat/common/platform.h>
+
+#include <dfs.h>
 #include <m0_ctl.h>
-#include <mmio.h>
 #include <plat_params.h>
 #include <plat_private.h>
-#include <platform.h>
-#include <platform_def.h>
 #include <pmu.h>
 #include <pmu_com.h>
 #include <pwm.h>
 #include <rk3399_def.h>
 #include <secure.h>
 #include <soc.h>
-#include <string.h>
 #include <suspend.h>
 
 DEFINE_BAKERY_LOCK(rockchip_pd_lock);
@@ -310,6 +313,7 @@ static int pmu_set_power_domain(uint32_t pd_id, uint32_t pd_state)
 		pmu_bus_idle_req(BUS_ID_PERIHP, state);
 		break;
 	default:
+		/* Do nothing in default case */
 		break;
 	}
 
@@ -647,12 +651,8 @@ int rockchip_soc_cores_pwr_dm_off(void)
 int rockchip_soc_hlvl_pwr_dm_off(uint32_t lvl,
 				 plat_local_state_t lvl_state)
 {
-	switch (lvl) {
-	case MPIDR_AFFLVL1:
+	if (lvl == MPIDR_AFFLVL1) {
 		clst_pwr_domain_suspend(lvl_state);
-		break;
-	default:
-		break;
 	}
 
 	return PSCI_E_SUCCESS;
@@ -675,12 +675,8 @@ int rockchip_soc_cores_pwr_dm_suspend(void)
 
 int rockchip_soc_hlvl_pwr_dm_suspend(uint32_t lvl, plat_local_state_t lvl_state)
 {
-	switch (lvl) {
-	case MPIDR_AFFLVL1:
+	if (lvl == MPIDR_AFFLVL1) {
 		clst_pwr_domain_suspend(lvl_state);
-		break;
-	default:
-		break;
 	}
 
 	return PSCI_E_SUCCESS;
@@ -698,12 +694,8 @@ int rockchip_soc_cores_pwr_dm_on_finish(void)
 int rockchip_soc_hlvl_pwr_dm_on_finish(uint32_t lvl,
 				       plat_local_state_t lvl_state)
 {
-	switch (lvl) {
-	case MPIDR_AFFLVL1:
+	if (lvl == MPIDR_AFFLVL1) {
 		clst_pwr_domain_resume(lvl_state);
-		break;
-	default:
-		break;
 	}
 
 	return PSCI_E_SUCCESS;
@@ -721,11 +713,8 @@ int rockchip_soc_cores_pwr_dm_resume(void)
 
 int rockchip_soc_hlvl_pwr_dm_resume(uint32_t lvl, plat_local_state_t lvl_state)
 {
-	switch (lvl) {
-	case MPIDR_AFFLVL1:
+	if (lvl == MPIDR_AFFLVL1) {
 		clst_pwr_domain_resume(lvl_state);
-	default:
-		break;
 	}
 
 	return PSCI_E_SUCCESS;
@@ -850,6 +839,7 @@ static void sys_slp_config(void)
 		      BIT_WITH_WMSK(PMU_CLR_GIC2_CORE_L_HW));
 
 	slp_mode_cfg = BIT(PMU_PWR_MODE_EN) |
+		       BIT(PMU_WKUP_RST_EN) |
 		       BIT(PMU_INPUT_CLAMP_EN) |
 		       BIT(PMU_POWER_OFF_REQ_CFG) |
 		       BIT(PMU_CPU0_PD_EN) |
@@ -867,7 +857,6 @@ static void sys_slp_config(void)
 		       BIT(PMU_DDRIO0_RET_DE_REQ) |
 		       BIT(PMU_DDRIO1_RET_EN) |
 		       BIT(PMU_DDRIO1_RET_DE_REQ) |
-		       BIT(PMU_DDRIO_RET_HW_DE_REQ) |
 		       BIT(PMU_CENTER_PD_EN) |
 		       BIT(PMU_PERILP_PD_EN) |
 		       BIT(PMU_CLK_PERILP_SRC_GATE_EN) |
@@ -1076,12 +1065,6 @@ static void resume_gpio(void)
 		gpio_set_direction(suspend_gpio[i].index, GPIO_DIR_OUT);
 		udelay(1);
 	}
-}
-
-static void m0_configure_suspend(void)
-{
-	/* set PARAM to M0_FUNC_SUSPEND */
-	mmio_write_32(M0_PARAM_ADDR + PARAM_M0_FUNC, M0_FUNC_SUSPEND);
 }
 
 void sram_save(void)
@@ -1319,10 +1302,14 @@ void wdt_register_restore(void)
 {
 	int i;
 
-	for (i = 0; i < 2; i++) {
+	for (i = 1; i >= 0; i--) {
 		mmio_write_32(WDT0_BASE + i * 4, store_wdt0[i]);
 		mmio_write_32(WDT1_BASE + i * 4, store_wdt1[i]);
 	}
+
+	/* write 0x76 to cnt_restart to keep watchdog alive */
+	mmio_write_32(WDT0_BASE + 0x0c, 0x76);
+	mmio_write_32(WDT1_BASE + 0x0c, 0x76);
 }
 
 int rockchip_soc_sys_pwr_dm_suspend(void)
@@ -1354,7 +1341,7 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 	set_pmu_rsthold();
 	sys_slp_config();
 
-	m0_configure_suspend();
+	m0_configure_execute_addr(M0PMU_BINCODE_BASE);
 	m0_start();
 
 	pmu_sgrf_rst_hld();
@@ -1383,7 +1370,8 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 	}
 	mmio_setbits_32(PMU_BASE + PMU_PWRDN_CON, BIT(PMU_SCU_B_PWRDWN_EN));
 
-	secure_watchdog_disable();
+	wdt_register_save();
+	secure_watchdog_gate();
 
 	/*
 	 * Disabling PLLs/PWM/DVFS is approaching WFI which is
@@ -1398,7 +1386,6 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 	suspend_uart();
 	grf_register_save();
 	cru_register_save();
-	wdt_register_save();
 	sram_save();
 	plat_rockchip_save_gpio();
 
@@ -1411,9 +1398,9 @@ int rockchip_soc_sys_pwr_dm_resume(void)
 	uint32_t status = 0;
 
 	plat_rockchip_restore_gpio();
-	wdt_register_restore();
 	cru_register_restore();
 	grf_register_restore();
+	wdt_register_restore();
 	resume_uart();
 	resume_apio();
 	resume_gpio();
@@ -1423,7 +1410,6 @@ int rockchip_soc_sys_pwr_dm_resume(void)
 	udelay(300);
 	enable_dvfs_plls();
 
-	secure_watchdog_enable();
 	secure_sgrf_init();
 	secure_sgrf_ddr_rgn_init();
 
@@ -1476,12 +1462,10 @@ int rockchip_soc_sys_pwr_dm_resume(void)
 		udelay(1);
 	}
 
-	pmu_sgrf_rst_hld_release();
 	pmu_scu_b_pwrup();
 	pmu_power_domains_resume();
 
 	restore_abpll();
-	restore_pmu_rsthold();
 	clr_hw_idle(BIT(PMU_CLR_CENTER1) |
 				BIT(PMU_CLR_ALIVE) |
 				BIT(PMU_CLR_MSCH0) |

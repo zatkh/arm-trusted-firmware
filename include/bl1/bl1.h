@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __BL1_FWU_H__
-#define __BL1_FWU_H__
+#ifndef BL1_H
+#define BL1_H
 
-#include <bl_common.h>
+#include <common/bl_common.h>
 
 /*
  * Defines for BL1 SMC function ids.
@@ -62,7 +62,29 @@
     ((_fid >= FWU_SMC_FID_START) && (_fid <= FWU_SMC_FID_END))
 
 #ifndef __ASSEMBLY__
-#include <cassert.h>
+
+#include <lib/cassert.h>
+
+struct entry_point_info;
+
+register_t bl1_smc_wrapper(uint32_t smc_fid,
+	void *cookie,
+	void *handle,
+	unsigned int flags);
+
+register_t bl1_smc_handler(unsigned int smc_fid,
+	register_t x1,
+	register_t x2,
+	register_t x3,
+	register_t x4,
+	void *cookie,
+	void *handle,
+	unsigned int flags);
+
+void bl1_print_next_bl_ep_info(const struct entry_point_info *bl_ep_info);
+
+void bl1_main(void);
+void bl1_plat_prepare_exit(entry_point_info_t *ep_info);
 
 /*
  * Check if the total number of FWU SMC calls are as expected.
@@ -71,5 +93,9 @@ CASSERT(FWU_NUM_SMC_CALLS == 	\
 		(FWU_SMC_FID_END - FWU_SMC_FID_START + 1),\
 		assert_FWU_NUM_SMC_CALLS_mismatch);
 
+/* Utility functions */
+void bl1_calc_bl2_mem_layout(const meminfo_t *bl1_mem_layout,
+			meminfo_t *bl2_mem_layout);
+
 #endif /* __ASSEMBLY__ */
-#endif /* __BL1_FWU_H__ */
+#endif /* BL1_H */

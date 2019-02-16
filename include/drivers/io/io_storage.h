@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __IO_H__
-#define __IO_H__
+#ifndef IO_STORAGE_H
+#define IO_STORAGE_H
 
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h> /* For ssize_t */
-#include <uuid.h>
 
+#include <tools_share/uuid.h>
 
 /* Device type which can be used to enable policy decisions about which device
  * to access */
@@ -22,6 +22,8 @@ typedef enum {
 	IO_TYPE_DUMMY,
 	IO_TYPE_FIRMWARE_IMAGE_PACKAGE,
 	IO_TYPE_BLOCK,
+	IO_TYPE_MMC,
+	IO_TYPE_STM32IMAGE,
 	IO_TYPE_MAX
 } io_type_t;
 
@@ -70,7 +72,7 @@ typedef struct io_block_spec {
 /* Open a connection to a device */
 int io_dev_open(const struct io_dev_connector *dev_con,
 		const uintptr_t dev_spec,
-		uintptr_t *dev_handle);
+		uintptr_t *handle);
 
 
 /* Initialise a device explicitly - to permit lazy initialisation or
@@ -99,4 +101,4 @@ int io_write(uintptr_t handle, const uintptr_t buffer, size_t length,
 int io_close(uintptr_t handle);
 
 
-#endif /* __IO_H__ */
+#endif /* IO_STORAGE_H */

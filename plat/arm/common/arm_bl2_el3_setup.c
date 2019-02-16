@@ -1,16 +1,24 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#include <console.h>
-#include <generic_delay_timer.h>
-#include <plat_arm.h>
-#include <platform.h>
+
+#include <assert.h>
+
+#include <drivers/generic_delay_timer.h>
+#include <plat/arm/common/plat_arm.h>
+#include <plat/common/platform.h>
+#include <platform_def.h>
 
 #pragma weak bl2_el3_early_platform_setup
 #pragma weak bl2_el3_plat_arch_setup
 #pragma weak bl2_el3_plat_prepare_exit
+
+#define MAP_BL2_EL3_TOTAL	MAP_REGION_FLAT(				\
+					bl2_el3_tzram_layout.total_base,	\
+					bl2_el3_tzram_layout.total_size,	\
+					MT_MEMORY | MT_RW | MT_SECURE)
 
 static meminfo_t bl2_el3_tzram_layout;
 
@@ -21,8 +29,7 @@ static meminfo_t bl2_el3_tzram_layout;
 void arm_bl2_el3_early_platform_setup(void)
 {
 	/* Initialize the console to provide early debug support */
-	console_init(PLAT_ARM_BOOT_UART_BASE, PLAT_ARM_BOOT_UART_CLK_IN_HZ,
-			ARM_CONSOLE_BAUDRATE);
+	arm_console_boot_init();
 
 	/*
 	 * Allow BL2 to see the whole Trusted RAM. This is determined
@@ -62,20 +69,22 @@ void bl2_el3_early_platform_setup(u_register_t arg0 __unused,
  ******************************************************************************/
 void arm_bl2_el3_plat_arch_setup(void)
 {
-	arm_setup_page_tables(bl2_el3_tzram_layout.total_base,
-			      bl2_el3_tzram_layout.total_size,
-			      BL_CODE_BASE,
-			      BL_CODE_END,
-			      BL_RO_DATA_BASE,
-			      BL_RO_DATA_END
+
 #if USE_COHERENT_MEM
-			      , BL_COHERENT_RAM_BASE,
-			      BL_COHERENT_RAM_END
+	/* Ensure ARM platforms dont use coherent memory in BL2_AT_EL3 */
+	assert(BL_COHERENT_RAM_END - BL_COHERENT_RAM_BASE == 0U);
 #endif
-			      );
+
+	const mmap_region_t bl_regions[] = {
+		MAP_BL2_EL3_TOTAL,
+		ARM_MAP_BL_RO,
+		{0}
+	};
+
+	setup_page_tables(bl_regions, plat_arm_get_mmap());
 
 #ifdef AARCH32
-	enable_mmu_secure(0);
+	enable_mmu_svc_mon(0);
 #else
 	enable_mmu_el3(0);
 #endif

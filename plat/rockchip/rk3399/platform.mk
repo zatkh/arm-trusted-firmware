@@ -32,11 +32,11 @@ RK_GIC_SOURCES		:=	drivers/arm/gic/common/gic_common.c	\
 
 PLAT_BL_COMMON_SOURCES	:=	lib/xlat_tables/xlat_tables_common.c	\
 				lib/xlat_tables/aarch64/xlat_tables.c	\
+				plat/common/aarch64/crash_console_helpers.S \
 				plat/common/plat_psci_common.c
 
 BL31_SOURCES	+=	${RK_GIC_SOURCES}				\
 			drivers/arm/cci/cci.c				\
-			drivers/console/aarch64/console.S		\
 			drivers/ti/uart/aarch64/16550_console.S		\
 			drivers/delay_timer/delay_timer.c		\
 			drivers/delay_timer/generic_delay_timer.c	\
@@ -65,7 +65,6 @@ BL31_SOURCES	+=	${RK_GIC_SOURCES}				\
 			${RK_PLAT_SOC}/drivers/dram/dram_spec_timing.c	\
 			${RK_PLAT_SOC}/drivers/dram/suspend.c
 
-ENABLE_PLAT_COMPAT	:=	0
 MULTI_CONSOLE_API	:=	1
 
 include lib/coreboot/coreboot.mk
@@ -82,12 +81,15 @@ BUILD_M0		:=	${BUILD_PLAT}/m0
 RK3399M0FW=${BUILD_M0}/${PLAT_M0}.bin
 $(eval $(call add_define,RK3399M0FW))
 
+RK3399M0PMUFW=${BUILD_M0}/${PLAT_M0}pmu.bin
+$(eval $(call add_define,RK3399M0PMUFW))
+
 HDCPFW=${RK_PLAT_SOC}/drivers/dp/hdcp.bin
 $(eval $(call add_define,HDCPFW))
 
 # CCACHE_EXTRAFILES is needed because ccache doesn't handle .incbin
 export CCACHE_EXTRAFILES
-${BUILD_PLAT}/bl31/pmu_fw.o: CCACHE_EXTRAFILES=$(RK3399M0FW)
+${BUILD_PLAT}/bl31/pmu_fw.o: CCACHE_EXTRAFILES=$(RK3399M0FW):$(RK3399M0PMUFW)
 ${RK_PLAT_SOC}/drivers/pmu/pmu_fw.c: $(RK3399M0FW)
 
 ${BUILD_PLAT}/bl31/cdn_dp.o: CCACHE_EXTRAFILES=$(HDCPFW)

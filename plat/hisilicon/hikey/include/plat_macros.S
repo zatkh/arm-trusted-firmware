@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLAT_MACROS_S__
-#define __PLAT_MACROS_S__
+#ifndef PLAT_MACROS_S
+#define PLAT_MACROS_S
 
-#include <cci.h>
-#include <gic_v2.h>
+#include <drivers/arm/cci.h>
+#include <drivers/arm/gicv2.h>
 #include <hi6220.h>
 #include <platform_def.h>
 
@@ -16,8 +16,7 @@
 gicc_regs:
 	.asciz "gicc_hppir", "gicc_ahppir", "gicc_ctlr", ""
 gicd_pend_reg:
-	.asciz "gicd_ispendr regs (Offsets 0x200 - 0x278)\n"	\
-		" Offset:\t\t\tvalue\n"
+	.asciz "gicd_ispendr regs (Offsets 0x200 - 0x278)\n Offset:\t\t\tvalue\n"
 newline:
 	.asciz "\n"
 spacer:
@@ -76,4 +75,4 @@ cci_iface_regs:
 	bl	str_in_crash_buf_print
 .endm
 
-#endif /* __PLAT_MACROS_S__ */
+#endif /* PLAT_MACROS_S */

@@ -1,14 +1,15 @@
 /*
- * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CPU_DATA_H__
-#define __CPU_DATA_H__
+#ifndef CPU_DATA_H
+#define CPU_DATA_H
 
-#include <ehf.h>
 #include <platform_def.h>	/* CACHE_WRITEBACK_GRANULE required */
+
+#include <bl31/ehf.h>
 
 #ifdef AARCH32
 
@@ -51,9 +52,9 @@
 #ifndef __ASSEMBLY__
 
 #include <arch_helpers.h>
-#include <cassert.h>
+#include <lib/cassert.h>
+#include <lib/psci/psci.h>
 #include <platform_def.h>
-#include <psci.h>
 #include <stdint.h>
 
 /* Offsets for the cpu_data structure */
@@ -102,6 +103,8 @@ typedef struct cpu_data {
 #endif
 } __aligned(CACHE_WRITEBACK_GRANULE) cpu_data_t;
 
+extern cpu_data_t percpu_data[PLATFORM_CORE_COUNT];
+
 #if CRASH_REPORTING
 /* verify assembler offsets match data structures */
 CASSERT(CPU_DATA_CRASH_BUF_OFFSET == __builtin_offsetof
@@ -142,9 +145,9 @@ void init_cpu_data_ptr(void);
 void init_cpu_ops(void);
 
 #define get_cpu_data(_m)		   _cpu_data()->_m
-#define set_cpu_data(_m, _v)		   _cpu_data()->_m = _v
+#define set_cpu_data(_m, _v)		   _cpu_data()->_m = (_v)
 #define get_cpu_data_by_index(_ix, _m)	   _cpu_data_by_index(_ix)->_m
-#define set_cpu_data_by_index(_ix, _m, _v) _cpu_data_by_index(_ix)->_m = _v
+#define set_cpu_data_by_index(_ix, _m, _v) _cpu_data_by_index(_ix)->_m = (_v)
 /* ((cpu_data_t *)0)->_m is a dummy to get the sizeof the struct member _m */
 #define flush_cpu_data(_m)	   flush_dcache_range((uintptr_t)	  \
 						&(_cpu_data()->_m), \
@@ -159,4 +162,4 @@ void init_cpu_ops(void);
 
 
 #endif /* __ASSEMBLY__ */
-#endif /* __CPU_DATA_H__ */
+#endif /* CPU_DATA_H */

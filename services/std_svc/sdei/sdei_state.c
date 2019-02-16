@@ -1,22 +1,24 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <cassert.h>
 #include <stdbool.h>
+
+#include <lib/cassert.h>
+
 #include "sdei_private.h"
 
 /* Aliases for SDEI handler states: 'R'unning, 'E'nabled, and re'G'istered */
-#define r_		0
+#define r_		0U
 #define R_		(1u << SDEI_STATF_RUNNING)
 
-#define e_		0
+#define e_		0U
 #define E_		(1u << SDEI_STATF_ENABLED)
 
-#define g_		0
+#define g_		0U
 #define G_		(1u << SDEI_STATF_REGISTERED)
 
 /* All possible composite handler states */
@@ -29,7 +31,7 @@
 #define REg_		(R_ | E_ | g_)
 #define REG_		(R_ | E_ | G_)
 
-#define MAX_STATES	(REG_ + 1)
+#define MAX_STATES	(REG_ + 1u)
 
 /* Invalid state */
 #define	SDEI_STATE_INVALID	((sdei_state_t) (-1))
@@ -46,9 +48,7 @@ CASSERT(NOP_ > REG_, sdei_state_overlap_nop);
 
 /*
  * SDEI handler state machine: refer to sections 6.1 and 6.1.2 of the SDEI v1.0
- * specification:
- *
- * http://infocenter.arm.com/help/topic/com.arm.doc.den0054a/ARM_DEN0054A_Software_Delegated_Exception_Interface.pdf
+ * specification (ARM DEN0054A).
  *
  * Not all calls contribute to handler state transition. This table is also used
  * to validate whether a call is permissible at a given handler state:

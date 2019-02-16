@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef CERT_H_
-#define CERT_H_
+#ifndef CERT_H
+#define CERT_H
 
 #include <openssl/ossl_typ.h>
 #include <openssl/x509.h>
 #include "ext.h"
 #include "key.h"
 
-#define CERT_MAX_EXT			4
+#define CERT_MAX_EXT			5
 
 /*
  * This structure contains information related to the generation of the
@@ -65,4 +65,4 @@ int cert_new(
 extern cert_t *certs;
 extern const unsigned int num_certs;
 
-#endif /* CERT_H_ */
+#endif /* CERT_H */

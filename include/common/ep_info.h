@@ -1,14 +1,14 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __EP_INFO_H__
-#define __EP_INFO_H__
+#ifndef EP_INFO_H
+#define EP_INFO_H
 
-#include <param_header.h>
-#include <utils_def.h>
+#include <common/param_header.h>
+#include <lib/utils_def.h>
 
 #define SECURE		U(0x0)
 #define NON_SECURE	U(0x1)
@@ -29,38 +29,44 @@
 /* The following are used to set/get image attributes. */
 #define PARAM_EP_SECURITY_MASK		U(0x1)
 
-#define GET_SECURITY_STATE(x) (x & PARAM_EP_SECURITY_MASK)
+/* Secure or Non-secure image */
+#define GET_SECURITY_STATE(x) ((x) & PARAM_EP_SECURITY_MASK)
 #define SET_SECURITY_STATE(x, security) \
 			((x) = ((x) & ~PARAM_EP_SECURITY_MASK) | (security))
 
-#define EP_EE_MASK	U(0x2)
-#define EP_EE_SHIFT	1
-#define EP_EE_LITTLE	U(0x0)
-#define EP_EE_BIG	U(0x2)
-#define EP_GET_EE(x) (x & EP_EE_MASK)
-#define EP_SET_EE(x, ee) ((x) = ((x) & ~EP_EE_MASK) | (ee))
+/* Endianness of the image. */
+#define EP_EE_MASK		U(0x2)
+#define EP_EE_SHIFT		U(1)
+#define EP_EE_LITTLE		U(0x0)
+#define EP_EE_BIG		U(0x2)
+#define EP_GET_EE(x)		((x) & EP_EE_MASK)
+#define EP_SET_EE(x, ee)	((x) = ((x) & ~EP_EE_MASK) | (ee))
 
-#define EP_ST_MASK	U(0x4)
-#define EP_ST_DISABLE	U(0x0)
-#define EP_ST_ENABLE	U(0x4)
-#define EP_GET_ST(x) (x & EP_ST_MASK)
-#define EP_SET_ST(x, ee) ((x) = ((x) & ~EP_ST_MASK) | (ee))
+/* Enable or disable access to the secure timer from secure images. */
+#define EP_ST_MASK		U(0x4)
+#define EP_ST_DISABLE		U(0x0)
+#define EP_ST_ENABLE		U(0x4)
+#define EP_GET_ST(x)		((x) & EP_ST_MASK)
+#define EP_SET_ST(x, ee)	((x) = ((x) & ~EP_ST_MASK) | (ee))
 
-#define EP_EXE_MASK	U(0x8)
-#define NON_EXECUTABLE	U(0x0)
-#define EXECUTABLE	U(0x8)
-#define EP_GET_EXE(x) (x & EP_EXE_MASK)
-#define EP_SET_EXE(x, ee) ((x) = ((x) & ~EP_EXE_MASK) | (ee))
+/* Determine if an image is executable or not. */
+#define EP_EXE_MASK		U(0x8)
+#define NON_EXECUTABLE		U(0x0)
+#define EXECUTABLE		U(0x8)
+#define EP_GET_EXE(x)		((x) & EP_EXE_MASK)
+#define EP_SET_EXE(x, ee)	((x) = ((x) & ~EP_EXE_MASK) | (ee))
 
+/* Flag to indicate the first image that is executed. */
 #define EP_FIRST_EXE_MASK	U(0x10)
 #define EP_FIRST_EXE		U(0x10)
-#define EP_GET_FIRST_EXE(x) ((x) & EP_FIRST_EXE_MASK)
-#define EP_SET_FIRST_EXE(x, ee) ((x) = ((x) & ~EP_FIRST_EXE_MASK) | (ee))
+#define EP_GET_FIRST_EXE(x)	((x) & EP_FIRST_EXE_MASK)
+#define EP_SET_FIRST_EXE(x, ee)	((x) = ((x) & ~EP_FIRST_EXE_MASK) | (ee))
 
 #ifndef __ASSEMBLY__
 
-#include <cassert.h>
-#include <types.h>
+#include <stdint.h>
+
+#include <lib/cassert.h>
 
 typedef struct aapcs64_params {
 	u_register_t arg0;
@@ -127,5 +133,4 @@ CASSERT(sizeof(uintptr_t) ==
 
 #endif /*__ASSEMBLY__*/
 
-#endif /* __EP_INFO_H__ */
-
+#endif /* EP_INFO_H */

@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __UFS_H__
-#define __UFS_H__
+#ifndef UFS_H
+#define UFS_H
+
+#include <lib/utils_def.h>
 
 /* register map of UFSHCI */
 /* Controller Capabilities */
@@ -214,6 +216,9 @@
 #define DESC_TYPE_INTERCONNECT		0x04
 #define DESC_TYPE_STRING		0x05
 
+#define DESC_DEVICE_MAX_SIZE		0x1F
+#define DEVICE_DESC_PARAM_MANF_ID	0x18
+
 #define ATTR_CUR_PWR_MODE		0x02	/* bCurrentPowerMode */
 #define ATTR_ACTIVECC			0x03	/* bActiveICCLevel */
 
@@ -246,8 +251,22 @@
 
 #define FLAG_DEVICE_INIT		0x01
 
+#define UFS_VENDOR_SKHYNIX		U(0x1AD)
+
+#define MAX_MODEL_LEN 16
+/**
+ * ufs_dev_desc - ufs device details from the device descriptor
+ * @wmanufacturerid: card details
+ * @model: card model
+ */
+struct ufs_dev_desc {
+	uint16_t wmanufacturerid;
+	int8_t model[MAX_MODEL_LEN + 1];
+};
+
 /* UFS Driver Flags */
 #define UFS_FLAGS_SKIPINIT		(1 << 0)
+#define UFS_FLAGS_VENDOR_SKHYNIX	(U(1) << 2)
 
 typedef struct sense_data {
 	uint8_t		resp_code : 7;
@@ -526,4 +545,4 @@ size_t ufs_read_blocks(int lun, int lba, uintptr_t buf, size_t size);
 size_t ufs_write_blocks(int lun, int lba, const uintptr_t buf, size_t size);
 int ufs_init(const ufs_ops_t *ops, ufs_params_t *params);
 
-#endif /* __UFS_H__ */
+#endif /* UFS_H */

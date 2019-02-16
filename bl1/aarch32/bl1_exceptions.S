@@ -1,17 +1,17 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl1.h>
-#include <bl_common.h>
+#include <bl1/bl1.h>
+#include <common/bl_common.h>
 #include <context.h>
-#include <smcc_helpers.h>
-#include <smcc_macros.S>
-#include <xlat_tables.h>
+#include <lib/xlat_tables/xlat_tables.h>
+#include <smccc_helpers.h>
+#include <smccc_macros.S>
 
 	.globl	bl1_aarch32_smc_handler
 
@@ -93,7 +93,7 @@ func smc_handler
 	 * Save the GP registers.
 	 * -----------------------------------------------------
 	 */
-	smcc_save_gp_mode_regs
+	smccc_save_gp_mode_regs
 
 	/*
 	 * `sp` still points to `smc_ctx_t`. Save it to a register
@@ -116,7 +116,7 @@ func smc_handler
 
 	/* Turn on the MMU */
 	mov	r0, #DISABLE_DCACHE
-	bl	enable_mmu_secure
+	bl	enable_mmu_svc_mon
 
 	/* Enable the data cache. */
 	ldcopr	r9, SCTLR

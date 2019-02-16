@@ -1,13 +1,15 @@
 /*
- * Copyright (c) 2018, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2018-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __MM_SVC_H__
-#define __MM_SVC_H__
+#ifndef MM_SVC_H
+#define MM_SVC_H
 
-#include <utils_def.h>
+#if SPM_MM
+
+#include <lib/utils_def.h>
 
 #define MM_VERSION_MAJOR	U(1)
 #define MM_VERSION_MAJOR_SHIFT	16
@@ -28,4 +30,6 @@
 #define MM_COMMUNICATE_AARCH64		U(0xC4000041)
 #define MM_COMMUNICATE_AARCH32		U(0x84000041)
 
-#endif /* __MM_SVC_H__ */
+#endif /* SPM_MM */
+
+#endif /* MM_SVC_H */

@@ -3,11 +3,12 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __MCUCFG_H__
-#define __MCUCFG_H__
+#ifndef MCUCFG_H
+#define MCUCFG_H
+
+#include <stdint.h>
 
 #include <mt8173_def.h>
-#include <stdint.h>
 
 struct mt8173_mcucfg_regs {
 	uint32_t mp0_ca7l_cache_config;
@@ -216,4 +217,4 @@ enum {
 			  ACLK_EMI_DYNAMIC_CG_EN | ACLK_INFRA_DYNAMIC_CG_EN,
 };
 
-#endif  /* __MCUCFG_H__ */
+#endif /* MCUCFG_H */

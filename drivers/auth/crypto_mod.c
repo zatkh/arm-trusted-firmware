@@ -1,15 +1,15 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <crypto_mod.h>
-#include <debug.h>
+
+#include <common/debug.h>
+#include <drivers/auth/crypto_mod.h>
 
 /* Variable exported by the crypto library through REGISTER_CRYPTO_LIB() */
-extern const crypto_lib_desc_t crypto_lib_desc;
 
 /*
  * The crypto module is responsible for verifying digital signatures and hashes.

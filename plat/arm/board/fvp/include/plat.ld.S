@@ -3,9 +3,10 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __PLAT_LD_S__
-#define __PLAT_LD_S__
+#ifndef PLAT_LD_S
+#define PLAT_LD_S
 
-#include <arm_common.ld.S>
+#include <plat/arm/common/arm_tzc_dram.ld.S>
+#include <plat/arm/common/arm_reclaim_init.ld.S>
 
-#endif /* __PLAT_LD_S__ */
+#endif /* PLAT_LD_S */

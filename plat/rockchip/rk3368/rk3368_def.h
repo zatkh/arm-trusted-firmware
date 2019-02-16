@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLAT_DEF_H__
-#define __PLAT_DEF_H__
+#ifndef RK3368_DEF_H
+#define RK3368_DEF_H
 
 /* Special value used to verify platform parameters from BL2 to BL3-1 */
 #define RK_BL31_PLAT_PARAM_VAL	0x0f1e2d3c4b5a6978ULL
@@ -96,10 +96,10 @@
 #define RK_IRQ_SEC_SGI_7	15
 
 /*
- * Define a list of Group 1 Secure and Group 0 interrupts as per GICv3
- * terminology. On a GICv2 system or mode, the lists will be merged and treated
- * as Group 0 interrupts.
+ * Define a list of Group 0 interrupts.
  */
-#define RK_G1S_IRQS		(RK_IRQ_SEC_PHY_TIMER)
+#define PLAT_RK_GICV2_G0_IRQS						\
+	INTR_PROP_DESC(RK_IRQ_SEC_PHY_TIMER, GIC_HIGHEST_SEC_PRIORITY,	\
+		       GICV2_INTR_GROUP0, GIC_INTR_CFG_LEVEL)
 
-#endif /* __PLAT_DEF_H__ */
+#endif /* RK3368_DEF_H */

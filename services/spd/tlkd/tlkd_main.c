@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,18 +13,20 @@
  * handle the request locally or delegate it to the Secure Payload. It is also
  * responsible for initialising and maintaining communication with the SP.
  ******************************************************************************/
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bl31.h>
-#include <bl_common.h>
-#include <context_mgmt.h>
-#include <debug.h>
 #include <errno.h>
-#include <platform.h>
-#include <runtime_svc.h>
 #include <stddef.h>
-#include <tlk.h>
-#include <uuid.h>
+
+#include <arch_helpers.h>
+#include <bl31/bl31.h>
+#include <bl32/payloads/tlk.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <plat/common/platform.h>
+#include <tools_share/uuid.h>
+
 #include "tlkd_private.h"
 
 extern const spd_pm_ops_t tlkd_pm_ops;
@@ -40,18 +42,18 @@ tlk_context_t tlk_ctx;
 static uint32_t boot_cpu;
 
 /* TLK UID: RFC-4122 compliant UUID (version-5, sha-1) */
-DEFINE_SVC_UUID(tlk_uuid,
-		0xbd11e9c9, 0x2bba, 0x52ee, 0xb1, 0x72,
-		0x46, 0x1f, 0xba, 0x97, 0x7f, 0x63);
+DEFINE_SVC_UUID2(tlk_uuid,
+	0xc9e911bd, 0xba2b, 0xee52, 0xb1, 0x72,
+	0x46, 0x1f, 0xba, 0x97, 0x7f, 0x63);
 
-int32_t tlkd_init(void);
+static int32_t tlkd_init(void);
 
 /*******************************************************************************
  * Secure Payload Dispatcher setup. The SPD finds out the SP entrypoint and type
  * (aarch32/aarch64) if not already known and initialises the context for entry
  * into the SP for its initialisation.
  ******************************************************************************/
-int32_t tlkd_setup(void)
+static int32_t tlkd_setup(void)
 {
 	entry_point_info_t *tlk_ep_info;
 
@@ -100,7 +102,7 @@ int32_t tlkd_setup(void)
  * used. This function performs a synchronous entry into the Secure payload.
  * The SP passes control back to this routine through a SMC.
  ******************************************************************************/
-int32_t tlkd_init(void)
+static int32_t tlkd_init(void)
 {
 	entry_point_info_t *tlk_entry_point;
 
@@ -133,14 +135,14 @@ int32_t tlkd_init(void)
  * will also return any information that the secure payload needs to do the
  * work assigned to it.
  ******************************************************************************/
-uint64_t tlkd_smc_handler(uint32_t smc_fid,
-			 uint64_t x1,
-			 uint64_t x2,
-			 uint64_t x3,
-			 uint64_t x4,
+static uintptr_t tlkd_smc_handler(uint32_t smc_fid,
+			 u_register_t x1,
+			 u_register_t x2,
+			 u_register_t x3,
+			 u_register_t x4,
 			 void *cookie,
 			 void *handle,
-			 uint64_t flags)
+			 u_register_t flags)
 {
 	cpu_context_t *ns_cpu_context;
 	gp_regs_t *gp_regs;
@@ -193,14 +195,18 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 	 * b. register shared memory with the SP for passing args
 	 *    required for maintaining sessions with the Trusted
 	 *    Applications.
-	 * c. register non-secure world's memory map with the OS
-	 * d. open/close sessions
-	 * e. issue commands to the Trusted Apps
-	 * f. resume the preempted yielding SMC call.
+	 * c. register shared persistent buffers for secure storage
+	 * d. register NS DRAM ranges passed by Cboot
+	 * e. register Root of Trust parameters from Cboot for Verified Boot
+	 * f. open/close sessions
+	 * g. issue commands to the Trusted Apps
+	 * h. resume the preempted yielding SMC call.
 	 */
 	case TLK_REGISTER_LOGBUF:
 	case TLK_REGISTER_REQBUF:
-	case TLK_REGISTER_NS_DRAM:
+	case TLK_SS_REGISTER_HANDLER:
+	case TLK_REGISTER_NS_DRAM_RANGES:
+	case TLK_SET_ROOT_OF_TRUST:
 	case TLK_OPEN_TA_SESSION:
 	case TLK_CLOSE_TA_SESSION:
 	case TLK_TA_LAUNCH_OP:
@@ -339,7 +345,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 
 		/*
 		 * SP has been successfully initialized. Register power
-		 * managemnt hooks with PSCI
+		 * management hooks with PSCI
 		 */
 		psci_register_spd_pm_hook(&tlkd_pm_ops);
 
@@ -350,6 +356,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		 * context.
 		 */
 		tlkd_synchronous_sp_exit(&tlk_ctx, x1);
+		break;
 
 	/*
 	 * These function IDs are used only by TLK to indicate it has
@@ -375,6 +382,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		 * return value to the caller
 		 */
 		tlkd_synchronous_sp_exit(&tlk_ctx, x1);
+		break;
 
 	/*
 	 * Return the number of service function IDs implemented to
@@ -396,6 +404,7 @@ uint64_t tlkd_smc_handler(uint32_t smc_fid,
 		SMC_RET2(handle, TLK_VERSION_MAJOR, TLK_VERSION_MINOR);
 
 	default:
+		WARN("%s: Unhandled SMC: 0x%x\n", __func__, smc_fid);
 		break;
 	}
 

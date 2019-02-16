@@ -1,19 +1,22 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch.h>
 #include <assert.h>
-#include <cci.h>
-#include <debug.h>
-#include <mmio.h>
+#include <stdbool.h>
 #include <stdint.h>
 
-#define MAKE_CCI_PART_NUMBER(hi, lo)	((hi << 8) | lo)
-#define CCI_PART_LO_MASK		0xff
-#define CCI_PART_HI_MASK		0xf
+#include <arch.h>
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/arm/cci.h>
+#include <lib/mmio.h>
+
+#define MAKE_CCI_PART_NUMBER(hi, lo)	(((hi) << 8) | (lo))
+#define CCI_PART_LO_MASK		U(0xff)
+#define CCI_PART_HI_MASK		U(0xf)
 
 /* CCI part number codes read from Peripheral ID registers 0 and 1 */
 #define CCI400_PART_NUM		0x420
@@ -31,14 +34,14 @@ static const int *cci_slave_if_map;
 static unsigned int max_master_id;
 static int cci_num_slave_ports;
 
-static int validate_cci_map(const int *map)
+static bool validate_cci_map(const int *map)
 {
-	unsigned int valid_cci_map = 0;
+	unsigned int valid_cci_map = 0U;
 	int slave_if_id;
-	int i;
+	unsigned int i;
 
 	/* Validate the map */
-	for (i = 0; i <= max_master_id; i++) {
+	for (i = 0U; i <= max_master_id; i++) {
 		slave_if_id = map[i];
 
 		if (slave_if_id < 0)
@@ -46,22 +49,22 @@ static int validate_cci_map(const int *map)
 
 		if (slave_if_id >= cci_num_slave_ports) {
 			ERROR("Slave interface ID is invalid\n");
-			return 0;
+			return false;
 		}
 
-		if (valid_cci_map & (1 << slave_if_id)) {
+		if ((valid_cci_map & (1U << slave_if_id)) != 0U) {
 			ERROR("Multiple masters are assigned same slave interface ID\n");
-			return 0;
+			return false;
 		}
-		valid_cci_map |= 1 << slave_if_id;
+		valid_cci_map |= 1U << slave_if_id;
 	}
 
-	if (!valid_cci_map) {
+	if (valid_cci_map == 0U) {
 		ERROR("No master is assigned a valid slave interface\n");
-		return 0;
+		return false;
 	}
 
-	return 1;
+	return true;
 }
 
 /*
@@ -83,29 +86,33 @@ static unsigned int read_cci_part_number(uintptr_t base)
  */
 static int get_slave_ports(unsigned int part_num)
 {
-	/* Macro to match CCI products */
-#define RET_ON_MATCH(product) \
-	case CCI ## product ## _PART_NUM: \
-		return CCI ## product ## _SLAVE_PORTS
+	int num_slave_ports = -1;
 
 	switch (part_num) {
 
-	RET_ON_MATCH(400);
-	RET_ON_MATCH(500);
-	RET_ON_MATCH(550);
-
+	case CCI400_PART_NUM:
+		num_slave_ports = CCI400_SLAVE_PORTS;
+		break;
+	case CCI500_PART_NUM:
+		num_slave_ports = CCI500_SLAVE_PORTS;
+		break;
+	case CCI550_PART_NUM:
+		num_slave_ports = CCI550_SLAVE_PORTS;
+		break;
 	default:
-		return -1;
+		/* Do nothing in default case */
+		break;
 	}
 
-#undef RET_ON_MATCH
+	return num_slave_ports;
 }
 #endif /* ENABLE_ASSERTIONS */
 
-void cci_init(uintptr_t base, const int *map, unsigned int num_cci_masters)
+void __init cci_init(uintptr_t base, const int *map,
+				unsigned int num_cci_masters)
 {
-	assert(map);
-	assert(base);
+	assert(map != NULL);
+	assert(base != 0U);
 
 	cci_base = base;
 	cci_slave_if_map = map;
@@ -115,7 +122,7 @@ void cci_init(uintptr_t base, const int *map, unsigned int num_cci_masters)
 	 * Master Id's are assigned from zero, So in an array of size n
 	 * the max master id is (n - 1).
 	 */
-	max_master_id = num_cci_masters - 1;
+	max_master_id = num_cci_masters - 1U;
 	cci_num_slave_ports = get_slave_ports(read_cci_part_number(base));
 #endif
 	assert(cci_num_slave_ports >= 0);
@@ -129,7 +136,7 @@ void cci_enable_snoop_dvm_reqs(unsigned int master_id)
 
 	assert(master_id <= max_master_id);
 	assert((slave_if_id < cci_num_slave_ports) && (slave_if_id >= 0));
-	assert(cci_base);
+	assert(cci_base != 0U);
 
 	/*
 	 * Enable Snoops and DVM messages, no need for Read/Modify/Write as
@@ -139,8 +146,14 @@ void cci_enable_snoop_dvm_reqs(unsigned int master_id)
 		      SLAVE_IFACE_OFFSET(slave_if_id) + SNOOP_CTRL_REG,
 		      DVM_EN_BIT | SNOOP_EN_BIT);
 
+	/*
+	 * Wait for the completion of the write to the Snoop Control Register
+	 * before testing the change_pending bit
+	 */
+	dsbish();
+
 	/* Wait for the dust to settle down */
-	while (mmio_read_32(cci_base + STATUS_REG) & CHANGE_PENDING_BIT)
+	while ((mmio_read_32(cci_base + STATUS_REG) & CHANGE_PENDING_BIT) != 0U)
 		;
 }
 
@@ -150,7 +163,7 @@ void cci_disable_snoop_dvm_reqs(unsigned int master_id)
 
 	assert(master_id <= max_master_id);
 	assert((slave_if_id < cci_num_slave_ports) && (slave_if_id >= 0));
-	assert(cci_base);
+	assert(cci_base != 0U);
 
 	/*
 	 * Disable Snoops and DVM messages, no need for Read/Modify/Write as
@@ -160,8 +173,14 @@ void cci_disable_snoop_dvm_reqs(unsigned int master_id)
 		      SLAVE_IFACE_OFFSET(slave_if_id) + SNOOP_CTRL_REG,
 		      ~(DVM_EN_BIT | SNOOP_EN_BIT));
 
+	/*
+	 * Wait for the completion of the write to the Snoop Control Register
+	 * before testing the change_pending bit
+	 */
+	dsbish();
+
 	/* Wait for the dust to settle down */
-	while (mmio_read_32(cci_base + STATUS_REG) & CHANGE_PENDING_BIT)
+	while ((mmio_read_32(cci_base + STATUS_REG) & CHANGE_PENDING_BIT) != 0U)
 		;
 }
 

@@ -1,13 +1,16 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <debug.h>
-#include <mmio.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <lib/mmio.h>
+#include <plat_private.h>
+
 #include "zynqmp_def.h"
 
 /*
@@ -147,8 +150,11 @@ static int get_fsbl_estate(const struct xfsbl_partition *partition)
  *
  * Process the handoff paramters from the FSBL and populate the BL32 and BL33
  * image info structures accordingly.
+ *
+ * Return: Return the status of the handoff. The value will be from the
+ *         fsbl_handoff enum.
  */
-void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
+enum fsbl_handoff fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 {
 	uint64_t atf_handoff_addr;
 	const struct xfsbl_atf_handoff_params *ATFHandoffParams;
@@ -157,8 +163,8 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 	assert((atf_handoff_addr < BL31_BASE) ||
 	       (atf_handoff_addr > (uint64_t)&__BL31_END__));
 	if (!atf_handoff_addr) {
-		ERROR("BL31: No ATF handoff structure passed\n");
-		panic();
+		WARN("BL31: No ATF handoff structure passed\n");
+		return FSBL_HANDOFF_NO_STRUCT;
 	}
 
 	ATFHandoffParams = (struct xfsbl_atf_handoff_params *)atf_handoff_addr;
@@ -166,17 +172,17 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 	    (ATFHandoffParams->magic[1] != 'L') ||
 	    (ATFHandoffParams->magic[2] != 'N') ||
 	    (ATFHandoffParams->magic[3] != 'X')) {
-		ERROR("BL31: invalid ATF handoff structure at %lx\n",
+		ERROR("BL31: invalid ATF handoff structure at %llx\n",
 		      atf_handoff_addr);
-		panic();
+		return FSBL_HANDOFF_INVAL_STRUCT;
 	}
 
-	VERBOSE("BL31: ATF handoff params at:0x%lx, entries:%u\n",
+	VERBOSE("BL31: ATF handoff params at:0x%llx, entries:%u\n",
 		atf_handoff_addr, ATFHandoffParams->num_entries);
 	if (ATFHandoffParams->num_entries > FSBL_MAX_PARTITIONS) {
 		ERROR("BL31: ATF handoff params: too many partitions (%u/%u)\n",
 		      ATFHandoffParams->num_entries, FSBL_MAX_PARTITIONS);
-		panic();
+		return FSBL_HANDOFF_TOO_MANY_PARTS;
 	}
 
 	/*
@@ -189,7 +195,7 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 		int target_estate, target_secure;
 		int target_cpu, target_endianness, target_el;
 
-		VERBOSE("BL31: %zd: entry:0x%lx, flags:0x%lx\n", i,
+		VERBOSE("BL31: %zd: entry:0x%llx, flags:0x%llx\n", i,
 			ATFHandoffParams->partition[i].entry_point,
 			ATFHandoffParams->partition[i].flags);
 
@@ -250,7 +256,7 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 			}
 		}
 
-		VERBOSE("Setting up %s entry point to:%lx, el:%x\n",
+		VERBOSE("Setting up %s entry point to:%llx, el:%x\n",
 			target_secure == FSBL_FLAGS_SECURE ? "BL32" : "BL33",
 			ATFHandoffParams->partition[i].entry_point,
 			target_el);
@@ -261,4 +267,6 @@ void fsbl_atf_handover(entry_point_info_t *bl32, entry_point_info_t *bl33)
 		else
 			EP_SET_EE(image->h.attr, EP_EE_LITTLE);
 	}
+
+	return FSBL_HANDOFF_SUCCESS;
 }

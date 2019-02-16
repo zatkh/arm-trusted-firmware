@@ -1,22 +1,24 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CORTEX_A9_H__
-#define __CORTEX_A9_H__
+#ifndef CORTEX_A9_H
+#define CORTEX_A9_H
+
+#include <lib/utils_def.h>
 
 /*******************************************************************************
  * Cortex-A9 midr with version/revision set to 0
  ******************************************************************************/
-#define CORTEX_A9_MIDR			0x410FC090
+#define CORTEX_A9_MIDR			U(0x410FC090)
 
 /*******************************************************************************
  * CPU Auxiliary Control register specific definitions.
  ******************************************************************************/
-#define CORTEX_A9_ACTLR_SMP_BIT		(1 << 6)
-#define CORTEX_A9_ACTLR_FLZW_BIT	(1 << 3)
+#define CORTEX_A9_ACTLR_SMP_BIT		(U(1) << 6)
+#define CORTEX_A9_ACTLR_FLZW_BIT	(U(1) << 3)
 
 /*******************************************************************************
  * CPU Power Control Register
@@ -28,4 +30,4 @@
 DEFINE_COPROCR_RW_FUNCS(pcr, PCR)
 #endif
 
-#endif /* __CORTEX_A9_H__ */
+#endif /* CORTEX_A9_H */

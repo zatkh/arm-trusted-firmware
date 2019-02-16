@@ -3,12 +3,12 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __ARM_MACROS_S__
-#define __ARM_MACROS_S__
+#ifndef ARM_MACROS_S
+#define ARM_MACROS_S
 
-#include <gic_common.h>
-#include <gicv2.h>
-#include <gicv3.h>
+#include <drivers/arm/gic_common.h>
+#include <drivers/arm/gicv2.h>
+#include <drivers/arm/gicv3.h>
 #include <platform_def.h>
 
 .section .rodata.gic_reg_name, "aS"
@@ -22,8 +22,7 @@ icc_regs:
 
 /* Registers common to both GICv2 and GICv3 */
 gicd_pend_reg:
-	.asciz "gicd_ispendr regs (Offsets 0x200 - 0x278)\n"	\
-		" Offset:\t\t\tvalue\n"
+	.asciz "gicd_ispendr regs (Offsets 0x200 - 0x278)\n Offset:\t\t\tvalue\n"
 newline:
 	.asciz "\n"
 spacer:
@@ -92,4 +91,4 @@ gicd_ispendr_loop:
 exit_print_gic_regs:
 	.endm
 
-#endif /* __ARM_MACROS_S__ */
+#endif /* ARM_MACROS_S */

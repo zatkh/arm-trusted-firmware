@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __DW_MMC_H__
-#define __DW_MMC_H__
+#ifndef DW_MMC_H
+#define DW_MMC_H
+
+#include <drivers/mmc.h>
 
 typedef struct dw_mmc_params {
 	uintptr_t	reg_base;
@@ -16,6 +18,6 @@ typedef struct dw_mmc_params {
 	unsigned int	flags;
 } dw_mmc_params_t;
 
-void dw_mmc_init(dw_mmc_params_t *params);
+void dw_mmc_init(dw_mmc_params_t *params, struct mmc_device_info *info);
 
-#endif	/* __DW_MMC_H__ */
+#endif /* DW_MMC_H */

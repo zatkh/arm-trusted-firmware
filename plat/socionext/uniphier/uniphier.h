@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __UNIPHIER_H__
-#define __UNIPHIER_H__
+#ifndef UNIPHIER_H
+#define UNIPHIER_H
 
 #include <stdint.h>
-#include <types.h>
+#include <string.h>
 
 unsigned int uniphier_get_soc_type(void);
 unsigned int uniphier_get_soc_model(void);
@@ -41,7 +41,6 @@ int uniphier_nand_init(uintptr_t *block_dev_spec);
 int uniphier_usb_init(unsigned int soc, uintptr_t *block_dev_spec);
 
 int uniphier_io_setup(unsigned int soc);
-int uniphier_check_image(unsigned int image_id);
 
 struct image_info;
 struct image_info *uniphier_get_image_info(unsigned int image_id);
@@ -89,4 +88,4 @@ unsigned int uniphier_calc_core_pos(u_register_t mpidr);
 #define UNIPHIER_IMAGE_BUF_SIZE		((UNIPHIER_NS_DRAM_LIMIT) - \
 					 (UNIPHIER_IMAGE_BUF_BASE))
 
-#endif /* __UNIPHIER_H__ */
+#endif /* UNIPHIER_H */

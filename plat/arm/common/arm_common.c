@@ -1,19 +1,22 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+
+#include <assert.h>
+
+#include <platform_def.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <arm_xlat_tables.h>
-#include <assert.h>
-#include <debug.h>
-#include <mmio.h>
-#include <plat_arm.h>
-#include <platform_def.h>
-#include <secure_partition.h>
-
-extern const mmap_region_t plat_arm_mmap[];
+#include <common/debug.h>
+#include <common/romlib.h>
+#include <lib/mmio.h>
+#include <lib/xlat_tables/xlat_tables_compat.h>
+#include <plat/arm/common/plat_arm.h>
+#include <plat/common/platform.h>
+#include <services/secure_partition.h>
 
 /* Weak definitions may be overridden in specific ARM standard platform */
 #pragma weak plat_get_ns_image_entrypoint
@@ -21,78 +24,15 @@ extern const mmap_region_t plat_arm_mmap[];
 
 /* Conditionally provide a weak definition of plat_get_syscnt_freq2 to avoid
  * conflicts with the definition in plat/common. */
-#if ERROR_DEPRECATED
 #pragma weak plat_get_syscnt_freq2
-#endif
 
-/*
- * Set up the page tables for the generic and platform-specific memory regions.
- * The extents of the generic memory regions are specified by the function
- * arguments and consist of:
- * - Trusted SRAM seen by the BL image;
- * - Code section;
- * - Read-only data section;
- * - Coherent memory region, if applicable.
- */
-void arm_setup_page_tables(uintptr_t total_base,
-			   size_t total_size,
-			   uintptr_t code_start,
-			   uintptr_t code_limit,
-			   uintptr_t rodata_start,
-			   uintptr_t rodata_limit
-#if USE_COHERENT_MEM
-			   ,
-			   uintptr_t coh_start,
-			   uintptr_t coh_limit
-#endif
-			   )
+
+void arm_setup_romlib(void)
 {
-	/*
-	 * Map the Trusted SRAM with appropriate memory attributes.
-	 * Subsequent mappings will adjust the attributes for specific regions.
-	 */
-	VERBOSE("Trusted SRAM seen by this BL image: %p - %p\n",
-		(void *) total_base, (void *) (total_base + total_size));
-	mmap_add_region(total_base, total_base,
-			total_size,
-			MT_MEMORY | MT_RW | MT_SECURE);
-
-	/* Re-map the code section */
-	VERBOSE("Code region: %p - %p\n",
-		(void *) code_start, (void *) code_limit);
-	mmap_add_region(code_start, code_start,
-			code_limit - code_start,
-			MT_CODE | MT_SECURE);
-
-	/* Re-map the read-only data section */
-	VERBOSE("Read-only data region: %p - %p\n",
-		(void *) rodata_start, (void *) rodata_limit);
-	mmap_add_region(rodata_start, rodata_start,
-			rodata_limit - rodata_start,
-			MT_RO_DATA | MT_SECURE);
-
-#if USE_COHERENT_MEM
-	/* Re-map the coherent memory region */
-	VERBOSE("Coherent region: %p - %p\n",
-		(void *) coh_start, (void *) coh_limit);
-	mmap_add_region(coh_start, coh_start,
-			coh_limit - coh_start,
-			MT_DEVICE | MT_RW | MT_SECURE);
+#if USE_ROMLIB
+	if (!rom_lib_init(ROMLIB_VERSION))
+		panic();
 #endif
-
-#if ENABLE_SPM && defined(IMAGE_BL31)
-	/* The address of the following region is calculated by the linker. */
-	mmap_add_region(SP_IMAGE_XLAT_TABLES_START,
-			SP_IMAGE_XLAT_TABLES_START,
-			SP_IMAGE_XLAT_TABLES_SIZE,
-			MT_MEMORY | MT_RW | MT_SECURE);
-#endif
-
-	/* Now (re-)map the platform-specific memory regions */
-	mmap_add(plat_arm_get_mmap());
-
-	/* Create the page tables to reflect the above mappings */
-	init_xlat_tables();
 }
 
 uintptr_t plat_get_ns_image_entrypoint(void)
@@ -100,7 +40,7 @@ uintptr_t plat_get_ns_image_entrypoint(void)
 #ifdef PRELOADED_BL33_BASE
 	return PRELOADED_BL33_BASE;
 #else
-	return PLAT_ARM_NS_IMAGE_OFFSET;
+	return PLAT_ARM_NS_IMAGE_BASE;
 #endif
 }
 
@@ -126,7 +66,7 @@ uint32_t arm_get_spsr_for_bl33_entry(void)
 	uint32_t spsr;
 
 	/* Figure out what mode we enter the non-secure world in */
-	mode = EL_IMPLEMENTED(2) ? MODE_EL2 : MODE_EL1;
+	mode = (el_implemented(2) != EL_IMPL_NONE) ? MODE_EL2 : MODE_EL1;
 
 	/*
 	 * TODO: Consider the possibility of specifying the SPSR in
@@ -167,15 +107,35 @@ void arm_configure_sys_timer(void)
 {
 	unsigned int reg_val;
 
+	/* Read the frequency of the system counter */
+	unsigned int freq_val = plat_get_syscnt_freq2();
+
 #if ARM_CONFIG_CNTACR
-	reg_val = (1 << CNTACR_RPCT_SHIFT) | (1 << CNTACR_RVCT_SHIFT);
-	reg_val |= (1 << CNTACR_RFRQ_SHIFT) | (1 << CNTACR_RVOFF_SHIFT);
-	reg_val |= (1 << CNTACR_RWVT_SHIFT) | (1 << CNTACR_RWPT_SHIFT);
+	reg_val = (1U << CNTACR_RPCT_SHIFT) | (1U << CNTACR_RVCT_SHIFT);
+	reg_val |= (1U << CNTACR_RFRQ_SHIFT) | (1U << CNTACR_RVOFF_SHIFT);
+	reg_val |= (1U << CNTACR_RWVT_SHIFT) | (1U << CNTACR_RWPT_SHIFT);
 	mmio_write_32(ARM_SYS_TIMCTL_BASE + CNTACR_BASE(PLAT_ARM_NSTIMER_FRAME_ID), reg_val);
 #endif /* ARM_CONFIG_CNTACR */
 
-	reg_val = (1 << CNTNSAR_NS_SHIFT(PLAT_ARM_NSTIMER_FRAME_ID));
+	reg_val = (1U << CNTNSAR_NS_SHIFT(PLAT_ARM_NSTIMER_FRAME_ID));
 	mmio_write_32(ARM_SYS_TIMCTL_BASE + CNTNSAR, reg_val);
+
+	/*
+	 * Initialize CNTFRQ register in CNTCTLBase frame. The CNTFRQ
+	 * system register initialized during psci_arch_setup() is different
+	 * from this and has to be updated independently.
+	 */
+	mmio_write_32(ARM_SYS_TIMCTL_BASE + CNTCTLBASE_CNTFRQ, freq_val);
+
+#ifdef PLAT_juno
+	/*
+	 * Initialize CNTFRQ register in Non-secure CNTBase frame.
+	 * This is only required for Juno, because it doesn't follow ARM ARM
+	 * in that the value updated in CNTFRQ is not reflected in
+	 * CNTBASEN_CNTFRQ. Hence update the value manually.
+	 */
+	mmio_write_32(ARM_SYS_CNT_BASE_NS + CNTBASEN_CNTFRQ, freq_val);
+#endif
 }
 #endif /* ARM_SYS_TIMCTL_BASE */
 
@@ -197,7 +157,7 @@ unsigned int plat_get_syscnt_freq2(void)
 	counter_base_frequency = mmio_read_32(ARM_SYS_CNTCTL_BASE + CNTFID_OFF);
 
 	/* The first entry of the frequency modes table must not be 0 */
-	if (counter_base_frequency == 0)
+	if (counter_base_frequency == 0U)
 		panic();
 
 	return counter_base_frequency;

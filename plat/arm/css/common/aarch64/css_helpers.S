@@ -3,10 +3,11 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+
 #include <arch.h>
 #include <asm_macros.S>
 #include <cpu_macros.S>
-#include <css_def.h>
+#include <platform_def.h>
 
 	.weak	plat_secondary_cold_boot_setup
 	.weak	plat_get_my_entrypoint
@@ -108,7 +109,7 @@ endfunc plat_is_my_cpu_primary
 func plat_is_my_cpu_primary
 	mov	x9, x30
 	bl	plat_my_core_pos
-	ldr	x1, =SCP_BOOT_CFG_ADDR
+	mov_imm	x1, SCP_BOOT_CFG_ADDR
 	ldr	x1, [x1]
 	ubfx	x1, x1, #PLAT_CSS_PRIMARY_CPU_SHIFT, \
 			#PLAT_CSS_PRIMARY_CPU_BIT_WIDTH

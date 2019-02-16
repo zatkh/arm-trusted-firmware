@@ -1,21 +1,24 @@
 /*
- * Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <amu.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <string.h>
+
+#include <platform_def.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <bl_common.h>
+#include <common/bl_common.h>
 #include <context.h>
-#include <context_mgmt.h>
-#include <platform.h>
-#include <platform_def.h>
-#include <smcc_helpers.h>
-#include <string.h>
-#include <utils.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <lib/extensions/amu.h>
+#include <lib/utils.h>
+#include <plat/common/platform.h>
+#include <smccc_helpers.h>
 
 /*******************************************************************************
  * Context management library initialisation routine. This library is used by
@@ -41,8 +44,7 @@ void cm_init(void)
  * entry_point_info structure.
  *
  * The security state to initialize is determined by the SECURE attribute
- * of the entry_point_info. The function returns a pointer to the initialized
- * context and sets this as the next context to return to.
+ * of the entry_point_info.
  *
  * The EE and ST attributes are used to configure the endianness and secure
  * timer availability for the new execution context.
@@ -51,13 +53,13 @@ void cm_init(void)
  * el3_exit(). For Secure-EL1 cm_prepare_el3_exit() is equivalent to
  * cm_e1_sysreg_context_restore().
  ******************************************************************************/
-static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t *ep)
+void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 {
 	unsigned int security_state;
 	uint32_t scr, sctlr;
 	regs_t *reg_ctx;
 
-	assert(ctx);
+	assert(ctx != NULL);
 
 	security_state = GET_SECURITY_STATE(ep->h.attr);
 
@@ -97,7 +99,7 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 		assert(((ep->spsr >> SPSR_E_SHIFT) & SPSR_E_MASK) ==
 			(EP_GET_EE(ep->h.attr) >> EP_EE_SHIFT));
 
-		sctlr = EP_GET_EE(ep->h.attr) ? SCTLR_EE_BIT : 0;
+		sctlr = (EP_GET_EE(ep->h.attr) != 0U) ? SCTLR_EE_BIT : 0U;
 		sctlr |= (SCTLR_RESET_VAL & ~(SCTLR_TE_BIT | SCTLR_V_BIT));
 		write_ctx_reg(reg_ctx, CTX_NS_SCTLR, sctlr);
 	}
@@ -130,7 +132,7 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
  * When EL2 is implemented but unused `el2_unused` is non-zero, otherwise
  * it is zero.
  ******************************************************************************/
-static void enable_extensions_nonsecure(int el2_unused)
+static void enable_extensions_nonsecure(bool el2_unused)
 {
 #if IMAGE_BL32
 #if ENABLE_AMU
@@ -149,7 +151,7 @@ void cm_init_context_by_index(unsigned int cpu_idx,
 {
 	cpu_context_t *ctx;
 	ctx = cm_get_context_by_index(cpu_idx, GET_SECURITY_STATE(ep->h.attr));
-	cm_init_context_common(ctx, ep);
+	cm_setup_context(ctx, ep);
 }
 
 /*******************************************************************************
@@ -161,7 +163,7 @@ void cm_init_my_context(const entry_point_info_t *ep)
 {
 	cpu_context_t *ctx;
 	ctx = cm_get_context(GET_SECURITY_STATE(ep->h.attr));
-	cm_init_context_common(ctx, ep);
+	cm_setup_context(ctx, ep);
 }
 
 /*******************************************************************************
@@ -176,13 +178,13 @@ void cm_prepare_el3_exit(uint32_t security_state)
 {
 	uint32_t hsctlr, scr;
 	cpu_context_t *ctx = cm_get_context(security_state);
-	int el2_unused = 0;
+	bool el2_unused = false;
 
-	assert(ctx);
+	assert(ctx != NULL);
 
 	if (security_state == NON_SECURE) {
 		scr = read_ctx_reg(get_regs_ctx(ctx), CTX_SCR);
-		if (scr & SCR_HCE_BIT) {
+		if ((scr & SCR_HCE_BIT) != 0U) {
 			/* Use SCTLR value to initialize HSCTLR */
 			hsctlr = read_ctx_reg(get_regs_ctx(ctx),
 						 CTX_NS_SCTLR);
@@ -199,9 +201,9 @@ void cm_prepare_el3_exit(uint32_t security_state)
 
 			write_scr(read_scr() & ~SCR_NS_BIT);
 			isb();
-		} else if (read_id_pfr1() &
-			(ID_PFR1_VIRTEXT_MASK << ID_PFR1_VIRTEXT_SHIFT)) {
-			el2_unused = 1;
+		} else if ((read_id_pfr1() &
+			(ID_PFR1_VIRTEXT_MASK << ID_PFR1_VIRTEXT_SHIFT)) != 0U) {
+			el2_unused = true;
 
 			/*
 			 * Set the NS bit to access NS copies of certain banked

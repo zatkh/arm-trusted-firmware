@@ -4,23 +4,25 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <debug.h>
-#include <emmc.h>
-#include <firmware_image_package.h>
-#include <io_block.h>
-#include <io_driver.h>
-#include <io_fip.h>
-#include <io_memmap.h>
-#include <io_storage.h>
-#include <mmio.h>
-#include <partition/partition.h>
-#include <semihosting.h>
 #include <string.h>
-#include <tbbr_img_def.h>
-#include <utils.h>
-#include "platform_def.h"
+
+#include <platform_def.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <common/tbbr/tbbr_img_def.h>
+#include <drivers/io/io_block.h>
+#include <drivers/io/io_driver.h>
+#include <drivers/io/io_fip.h>
+#include <drivers/io/io_memmap.h>
+#include <drivers/io/io_storage.h>
+#include <drivers/mmc.h>
+#include <drivers/partition/partition.h>
+#include <lib/mmio.h>
+#include <lib/semihosting.h>
+#include <lib/utils.h>
+#include <tools_share/firmware_image_package.h>
 
 #if !POPLAR_RECOVERY
 static const io_dev_connector_t *emmc_dev_con;
@@ -38,10 +40,10 @@ static const io_block_dev_spec_t emmc_dev_spec = {
 		.length	= POPLAR_EMMC_DATA_SIZE,
 	},
 	.ops		= {
-		.read	= emmc_read_blocks,
-		.write	= emmc_write_blocks,
+		.read	= mmc_read_blocks,
+		.write	= mmc_write_blocks,
 	},
-	.block_size	= EMMC_BLOCK_SIZE,
+	.block_size	= MMC_BLOCK_SIZE,
 };
 #else
 static const io_dev_connector_t *mmap_dev_con;

@@ -1,12 +1,12 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl_common.h>
+#include <common/bl_common.h>
 
 
 	.globl	bl2_entrypoint
@@ -15,12 +15,14 @@
 
 func bl2_entrypoint
 	/*---------------------------------------------
-	 * Save from x1 the extents of the tzram
-	 * available to BL2 for future use.
-	 * x0 is not currently used.
+	 * Save arguments x0 - x3 from BL1 for future
+	 * use.
 	 * ---------------------------------------------
 	 */
-	mov	x20, x1
+	mov	x20, x0
+	mov	x21, x1
+	mov	x22, x2
+	mov	x23, x3
 
 	/* ---------------------------------------------
 	 * Set the exception vector to something sane.
@@ -68,13 +70,19 @@ func bl2_entrypoint
 	 *   - the coherent memory section.
 	 * ---------------------------------------------
 	 */
-	ldr	x0, =__BSS_START__
-	ldr	x1, =__BSS_SIZE__
+	adrp	x0, __BSS_START__
+	add	x0, x0, :lo12:__BSS_START__
+	adrp	x1, __BSS_END__
+	add	x1, x1, :lo12:__BSS_END__
+	sub	x1, x1, x0
 	bl	zeromem
 
 #if USE_COHERENT_MEM
-	ldr	x0, =__COHERENT_RAM_START__
-	ldr	x1, =__COHERENT_RAM_UNALIGNED_SIZE__
+	adrp	x0, __COHERENT_RAM_START__
+	add	x0, x0, :lo12:__COHERENT_RAM_START__
+	adrp	x1, __COHERENT_RAM_END_UNALIGNED__
+	add	x1, x1, :lo12:__COHERENT_RAM_END_UNALIGNED__
+	sub	x1, x1, x0
 	bl	zeromem
 #endif
 
@@ -103,7 +111,11 @@ func bl2_entrypoint
 	 * ---------------------------------------------
 	 */
 	mov	x0, x20
-	bl	bl2_early_platform_setup
+	mov	x1, x21
+	mov	x2, x22
+	mov	x3, x23
+	bl	bl2_early_platform_setup2
+
 	bl	bl2_plat_arch_setup
 
 	/* ---------------------------------------------

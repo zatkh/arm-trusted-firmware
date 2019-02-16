@@ -1,28 +1,22 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arm_gic.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <console.h>
-#include <coreboot.h>
-#include <debug.h>
-#include <generic_delay_timer.h>
-#include <mmio.h>
-#include <plat_private.h>
-#include <platform.h>
-#include <platform_def.h>
-#include <uart_16550.h>
 
-/*******************************************************************************
- * Declarations of linker defined symbols which will help us find the layout
- * of trusted SRAM
- ******************************************************************************/
-unsigned long __RO_START__;
-unsigned long __RO_END__;
+#include <platform_def.h>
+
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/console.h>
+#include <drivers/generic_delay_timer.h>
+#include <drivers/ti/uart/uart_16550.h>
+#include <lib/coreboot.h>
+#include <lib/mmio.h>
+#include <plat_private.h>
+#include <plat/common/platform.h>
 
 /*
  * The next 2 constants identify the extents of the code & RO data region.
@@ -30,8 +24,8 @@ unsigned long __RO_END__;
  * page-aligned.  It is the responsibility of the linker script to ensure that
  * __RO_START__ and __RO_END__ linker symbols refer to page-aligned addresses.
  */
-#define BL31_RO_BASE (unsigned long)(&__RO_START__)
-#define BL31_RO_LIMIT (unsigned long)(&__RO_END__)
+IMPORT_SYM(unsigned long, __RO_START__,	BL31_RO_BASE);
+IMPORT_SYM(unsigned long, __RO_END__,	BL31_RO_LIMIT);
 
 static entry_point_info_t bl32_ep_info;
 static entry_point_info_t bl33_ep_info;
@@ -62,16 +56,18 @@ void params_early_setup(void *plat_param_from_bl2)
 
 /*******************************************************************************
  * Perform any BL3-1 early platform setup. Here is an opportunity to copy
- * parameters passed by the calling EL (S-EL1 in BL2 & S-EL3 in BL1) before they
+ * parameters passed by the calling EL (S-EL1 in BL2 & EL3 in BL1) before they
  * are lost (potentially). This needs to be done before the MMU is initialized
  * so that the memory layout can be used while creating page tables.
  * BL2 has flushed this information to memory, so we are guaranteed to pick up
  * good data.
  ******************************************************************************/
-void bl31_early_platform_setup(bl31_params_t *from_bl2,
-			       void *plat_params_from_bl2)
+void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+				u_register_t arg2, u_register_t arg3)
 {
 	static console_16550_t console;
+	struct rockchip_bl31_params *arg_from_bl2 = (struct rockchip_bl31_params *) arg0;
+	void *plat_params_from_bl2 = (void *) arg1;
 
 	params_early_setup(plat_params_from_bl2);
 
@@ -89,13 +85,13 @@ void bl31_early_platform_setup(bl31_params_t *from_bl2,
 	VERBOSE("bl31_setup\n");
 
 	/* Passing a NULL context is a critical programming error */
-	assert(from_bl2);
+	assert(arg_from_bl2);
 
-	assert(from_bl2->h.type == PARAM_BL31);
-	assert(from_bl2->h.version >= VERSION_1);
+	assert(arg_from_bl2->h.type == PARAM_BL31);
+	assert(arg_from_bl2->h.version >= VERSION_1);
 
-	bl32_ep_info = *from_bl2->bl32_ep_info;
-	bl33_ep_info = *from_bl2->bl33_ep_info;
+	bl32_ep_info = *arg_from_bl2->bl32_ep_info;
+	bl33_ep_info = *arg_from_bl2->bl33_ep_info;
 }
 
 /*******************************************************************************

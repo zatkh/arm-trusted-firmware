@@ -15,6 +15,7 @@ INCLUDES		+=	-Iinclude/bl32/sp_min
 BL32_SOURCES		+=	bl32/sp_min/sp_min_main.c		\
 				bl32/sp_min/aarch32/entrypoint.S	\
 				common/runtime_svc.c			\
+				plat/common/aarch32/plat_sp_min_common.c\
 				services/std_svc/std_svc_setup.c	\
 				${PSCI_LIB_SOURCES}
 
@@ -28,8 +29,8 @@ BL32_SOURCES		+=	lib/extensions/amu/aarch32/amu.c\
 endif
 
 ifeq (${WORKAROUND_CVE_2017_5715},1)
-BL32_SOURCES		+=	bl32/sp_min/workaround_cve_2017_5715_bpiall.S	\
-				bl32/sp_min/workaround_cve_2017_5715_icache_inv.S
+BL32_SOURCES		+=	bl32/sp_min/wa_cve_2017_5715_bpiall.S	\
+				bl32/sp_min/wa_cve_2017_5715_icache_inv.S
 endif
 
 BL32_LINKERFILE	:=	bl32/sp_min/sp_min.ld.S

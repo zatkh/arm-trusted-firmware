@@ -4,14 +4,16 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLAT_PRIVATE_H__
-#define __PLAT_PRIVATE_H__
+#ifndef PLAT_PRIVATE_H
+#define PLAT_PRIVATE_H
 
 #ifndef __ASSEMBLY__
-#include <mmio.h>
-#include <psci.h>
+
 #include <stdint.h>
-#include <xlat_tables.h>
+
+#include <lib/psci/psci.h>
+#include <lib/xlat_tables/xlat_tables.h>
+#include <lib/mmio.h>
 
 #define __sramdata __attribute__((section(".sram.data")))
 #define __sramconst __attribute__((section(".sram.rodata")))
@@ -28,6 +30,14 @@ extern uint32_t __bl31_sram_text_real_end, __bl31_sram_data_real_end;
 extern uint32_t __sram_incbin_start, __sram_incbin_end;
 extern uint32_t __sram_incbin_real_end;
 
+struct rockchip_bl31_params {
+       param_header_t h;
+       image_info_t *bl31_image_info;
+       entry_point_info_t *bl32_ep_info;
+       image_info_t *bl32_image_info;
+       entry_point_info_t *bl33_ep_info;
+       image_info_t *bl33_image_info;
+};
 
 /******************************************************************************
  * The register have write-mask bits, it is mean, if you want to set the bits,
@@ -135,4 +145,4 @@ void rockchip_plat_mmu_el3(void);
 #define PMU_CPU_AUTO_PWRDN	0xf0
 #define PMU_CLST_RET	0xa5
 
-#endif /* __PLAT_PRIVATE_H__ */
+#endif /* PLAT_PRIVATE_H */

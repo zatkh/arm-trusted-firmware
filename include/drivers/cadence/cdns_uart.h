@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CADENCE_UART_H__
-#define __CADENCE_UART_H__
+#ifndef CDNS_UART_H
+#define CDNS_UART_H
 
-#include <console.h>
+#include <drivers/console.h>
 
 /* This is very minimalistic and will only work in QEMU.  */
 
@@ -29,7 +29,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <types.h>
+#include <stdint.h>
 
 typedef struct {
 	console_t console;
@@ -42,9 +42,9 @@ typedef struct {
  * for the lifetime of the console, such as a global or static local variable.
  * Its contents will be reinitialized from scratch.
  */
-int console_cdns_register(uint64_t baseaddr, uint32_t clock, uint32_t baud,
+int console_cdns_register(uintptr_t baseaddr, uint32_t clock, uint32_t baud,
 			  console_cdns_t *console);
 
 #endif /*__ASSEMBLY__*/
 
-#endif
+#endif /* CDNS_UART_H */

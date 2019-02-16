@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __DELAY_TIMER_H__
-#define __DELAY_TIMER_H__
+#ifndef DELAY_TIMER_H
+#define DELAY_TIMER_H
 
 #include <stdint.h>
 
@@ -25,7 +25,6 @@ typedef struct timer_ops {
 
 void mdelay(uint32_t msec);
 void udelay(uint32_t usec);
-void timer_init(const timer_ops_t *ops);
+void timer_init(const timer_ops_t *ops_ptr);
 
-
-#endif /* __DELAY_TIMER_H__ */
+#endif /* DELAY_TIMER_H */

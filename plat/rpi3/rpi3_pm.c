@@ -1,24 +1,21 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <console.h>
-#include <debug.h>
-#include <mmio.h>
+
 #include <platform_def.h>
-#include <platform.h>
-#include <psci.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/console.h>
+#include <lib/mmio.h>
+#include <lib/psci/psci.h>
+#include <plat/common/platform.h>
 
 #include "rpi3_hw.h"
-
-/*
- * The secure entry point to be used on warm reset.
- */
-static uintptr_t secure_entrypoint;
 
 /* Make composite power state parameter till power level 0 */
 #if PSCI_EXTENDED_STATE_ID
@@ -143,46 +140,66 @@ static int rpi3_pwr_domain_on(u_register_t mpidr)
  * being turned off earlier. The target_state encodes the low power state that
  * each level has woken up from.
  ******************************************************************************/
-void rpi3_pwr_domain_on_finish(const psci_power_state_t *target_state)
+static void rpi3_pwr_domain_on_finish(const psci_power_state_t *target_state)
 {
 	assert(target_state->pwr_domain_state[MPIDR_AFFLVL0] ==
 					PLAT_LOCAL_STATE_OFF);
 }
 
 /*******************************************************************************
- * Platform handler to reboot the system
+ * Platform handlers for system reset and system off.
  ******************************************************************************/
-#define RESET_TIMEOUT	10
 
-static void __dead2 rpi3_system_reset(void)
+/* 10 ticks (Watchdog timer = Timer clock / 16) */
+#define RESET_TIMEOUT	U(10)
+
+static void __dead2 rpi3_watchdog_reset(void)
 {
-	/* Setup watchdog for reset */
-
-	static const uintptr_t base = RPI3_PM_BASE;
 	uint32_t rstc;
-
-	INFO("rpi3: PSCI System Reset: invoking watchdog reset\n");
 
 	console_flush();
 
-	rstc = mmio_read_32(base + RPI3_PM_RSTC_OFFSET);
-	rstc &= ~RPI3_PM_RSTC_WRCFG_MASK;
-	rstc |= RPI3_PM_RSTC_WRCFG_FULL_RESET;
+	dsbsy();
+	isb();
 
-	dmbst();
-
-	/*
-	 * Watchdog timer = Timer clock / 16
-	 * Password (31:16) | Value (11:0)
-	 */
-	mmio_write_32(base + RPI3_PM_WDOG_OFFSET,
+	mmio_write_32(RPI3_PM_BASE + RPI3_PM_WDOG_OFFSET,
 		      RPI3_PM_PASSWORD | RESET_TIMEOUT);
-	mmio_write_32(base + RPI3_PM_RSTC_OFFSET,
-		      RPI3_PM_PASSWORD | rstc);
+
+	rstc = mmio_read_32(RPI3_PM_BASE + RPI3_PM_RSTC_OFFSET);
+	rstc &= ~RPI3_PM_RSTC_WRCFG_MASK;
+	rstc |= RPI3_PM_PASSWORD | RPI3_PM_RSTC_WRCFG_FULL_RESET;
+	mmio_write_32(RPI3_PM_BASE + RPI3_PM_RSTC_OFFSET, rstc);
 
 	for (;;) {
 		wfi();
 	}
+}
+
+static void __dead2 rpi3_system_reset(void)
+{
+	INFO("rpi3: PSCI_SYSTEM_RESET: Invoking watchdog reset\n");
+
+	rpi3_watchdog_reset();
+}
+
+static void __dead2 rpi3_system_off(void)
+{
+	uint32_t rsts;
+
+	INFO("rpi3: PSCI_SYSTEM_OFF: Invoking watchdog reset\n");
+
+	/*
+	 * This function doesn't actually make the Raspberry Pi turn itself off,
+	 * the hardware doesn't allow it. It simply reboots it and the RSTS
+	 * value tells the bootcode.bin firmware not to continue the regular
+	 * bootflow and to stay in a low power mode.
+	 */
+
+	rsts = mmio_read_32(RPI3_PM_BASE + RPI3_PM_RSTS_OFFSET);
+	rsts |= RPI3_PM_PASSWORD | RPI3_PM_RSTS_WRCFG_HALT;
+	mmio_write_32(RPI3_PM_BASE + RPI3_PM_RSTS_OFFSET, rsts);
+
+	rpi3_watchdog_reset();
 }
 
 /*******************************************************************************
@@ -192,6 +209,7 @@ static const plat_psci_ops_t plat_rpi3_psci_pm_ops = {
 	.cpu_standby = rpi3_cpu_standby,
 	.pwr_domain_on = rpi3_pwr_domain_on,
 	.pwr_domain_on_finish = rpi3_pwr_domain_on_finish,
+	.system_off = rpi3_system_off,
 	.system_reset = rpi3_system_reset,
 	.validate_power_state = rpi3_validate_power_state,
 };
@@ -199,10 +217,9 @@ static const plat_psci_ops_t plat_rpi3_psci_pm_ops = {
 int plat_setup_psci_ops(uintptr_t sec_entrypoint,
 			const plat_psci_ops_t **psci_ops)
 {
-	uintptr_t *mailbox = (void *)PLAT_RPI3_TRUSTED_MAILBOX_BASE;
+	uintptr_t *entrypoint = (void *) PLAT_RPI3_TM_ENTRYPOINT;
 
-	*mailbox = sec_entrypoint;
-	secure_entrypoint = (uintptr_t)sec_entrypoint;
+	*entrypoint = sec_entrypoint;
 	*psci_ops = &plat_rpi3_psci_pm_ops;
 
 	return 0;

@@ -4,23 +4,26 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch.h>
-#include <arch_helpers.h>
 #include <assert.h>
-#include <auth_mod.h>
-#include <bl_common.h>
-#include <debug.h>
-#include <desc_image_load.h>
-#include <platform.h>
-#include <platform_def.h>
 #include <stdint.h>
 
+#include <platform_def.h>
+
+#include <arch.h>
+#include <arch_helpers.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/desc_image_load.h>
+#include <drivers/auth/auth_mod.h>
+#include <plat/common/platform.h>
+
+#include "bl2_private.h"
 
 /*******************************************************************************
  * This function loads SCP_BL2/BL3x images and returns the ep_info for
  * the next executable image.
  ******************************************************************************/
-entry_point_info_t *bl2_load_images(void)
+struct entry_point_info *bl2_load_images(void)
 {
 	bl_params_t *bl2_to_next_bl_params;
 	bl_load_info_t *bl2_load_info;

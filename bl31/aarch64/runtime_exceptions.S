@@ -1,16 +1,19 @@
 /*
- * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <platform_def.h>
+
 #include <arch.h>
 #include <asm_macros.S>
+#include <bl31/ea_handle.h>
+#include <bl31/interrupt_mgmt.h>
+#include <common/runtime_svc.h>
 #include <context.h>
-#include <cpu_data.h>
-#include <interrupt_mgmt.h>
-#include <platform_def.h>
-#include <runtime_svc.h>
+#include <lib/el3_runtime/cpu_data.h>
+#include <lib/smccc.h>
 
 	.globl	runtime_exceptions
 
@@ -34,17 +37,54 @@
 	.globl	fiq_aarch32
 	.globl	serror_aarch32
 
+	/*
+	 * Macro that prepares entry to EL3 upon taking an exception.
+	 *
+	 * With RAS_EXTENSION, this macro synchronizes pending errors with an ESB
+	 * instruction. When an error is thus synchronized, the handling is
+	 * delegated to platform EA handler.
+	 *
+	 * Without RAS_EXTENSION, this macro just saves x30, and unmasks
+	 * Asynchronous External Aborts.
+	 */
+	.macro check_and_unmask_ea
+#if RAS_EXTENSION
+	/* Synchronize pending External Aborts */
+	esb
+
+	/* Unmask the SError interrupt */
+	msr	daifclr, #DAIF_ABT_BIT
+
+	/*
+	 * Explicitly save x30 so as to free up a register and to enable
+	 * branching
+	 */
+	str	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
+
+	/* Check for SErrors synchronized by the ESB instruction */
+	mrs	x30, DISR_EL1
+	tbz	x30, #DISR_A_BIT, 1f
+
+	/* Save GP registers and restore them afterwards */
+	bl	save_gp_registers
+	bl	handle_lower_el_ea_esb
+	bl	restore_gp_registers
+
+1:
+#else
+	/* Unmask the SError interrupt */
+	msr	daifclr, #DAIF_ABT_BIT
+
+	str	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
+#endif
+	.endm
+
 	/* ---------------------------------------------------------------------
 	 * This macro handles Synchronous exceptions.
 	 * Only SMC exceptions are supported.
 	 * ---------------------------------------------------------------------
 	 */
 	.macro	handle_sync_exception
-	/* Enable the SError interrupt */
-	msr	daifclr, #DAIF_ABT_BIT
-
-	str	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
-
 #if ENABLE_RUNTIME_INSTRUMENTATION
 	/*
 	 * Read the timestamp value and store it in per-cpu data. The value
@@ -68,9 +108,9 @@
 	cmp	x30, #EC_AARCH64_SMC
 	b.eq	smc_handler64
 
-	/* Other kinds of synchronous exceptions are not handled */
+	/* Synchronous exceptions other than the above are assumed to be EA */
 	ldr	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
-	b	report_unhandled_exception
+	b	enter_lower_el_sync_ea
 	.endm
 
 
@@ -80,12 +120,7 @@
 	 * ---------------------------------------------------------------------
 	 */
 	.macro	handle_interrupt_exception label
-	/* Enable the SError interrupt */
-	msr	daifclr, #DAIF_ABT_BIT
-
-	str	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
 	bl	save_gp_registers
-
 	/* Save the EL3 system registers needed to return from this exception */
 	mrs	x0, spsr_el3
 	mrs	x1, elr_el3
@@ -153,25 +188,6 @@ interrupt_exit_\label:
 	.endm
 
 
-	.macro save_x4_to_x29_sp_el0
-	stp	x4, x5, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X4]
-	stp	x6, x7, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X6]
-	stp	x8, x9, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X8]
-	stp	x10, x11, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X10]
-	stp	x12, x13, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X12]
-	stp	x14, x15, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X14]
-	stp	x16, x17, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X16]
-	stp	x18, x19, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X18]
-	stp	x20, x21, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X20]
-	stp	x22, x23, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X22]
-	stp	x24, x25, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X24]
-	stp	x26, x27, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X26]
-	stp	x28, x29, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X28]
-	mrs	x18, sp_el0
-	str	x18, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_SP_EL0]
-	.endm
-
-
 vector_base runtime_exceptions
 
 	/* ---------------------------------------------------------------------
@@ -181,7 +197,7 @@ vector_base runtime_exceptions
 vector_entry sync_exception_sp_el0
 	/* We don't expect any synchronous exceptions from EL3 */
 	b	report_unhandled_exception
-	check_vector_size sync_exception_sp_el0
+end_vector_entry sync_exception_sp_el0
 
 vector_entry irq_sp_el0
 	/*
@@ -189,17 +205,17 @@ vector_entry irq_sp_el0
 	 * error. Loop infinitely.
 	 */
 	b	report_unhandled_interrupt
-	check_vector_size irq_sp_el0
+end_vector_entry irq_sp_el0
 
 
 vector_entry fiq_sp_el0
 	b	report_unhandled_interrupt
-	check_vector_size fiq_sp_el0
+end_vector_entry fiq_sp_el0
 
 
 vector_entry serror_sp_el0
-	b	report_unhandled_exception
-	check_vector_size serror_sp_el0
+	no_ret	plat_handle_el3_ea
+end_vector_entry serror_sp_el0
 
 	/* ---------------------------------------------------------------------
 	 * Current EL with SP_ELx: 0x200 - 0x400
@@ -213,19 +229,19 @@ vector_entry sync_exception_sp_elx
 	 * corrupted.
 	 */
 	b	report_unhandled_exception
-	check_vector_size sync_exception_sp_elx
+end_vector_entry sync_exception_sp_elx
 
 vector_entry irq_sp_elx
 	b	report_unhandled_interrupt
-	check_vector_size irq_sp_elx
+end_vector_entry irq_sp_elx
 
 vector_entry fiq_sp_elx
 	b	report_unhandled_interrupt
-	check_vector_size fiq_sp_elx
+end_vector_entry fiq_sp_elx
 
 vector_entry serror_sp_elx
-	b	report_unhandled_exception
-	check_vector_size serror_sp_elx
+	no_ret	plat_handle_el3_ea
+end_vector_entry serror_sp_elx
 
 	/* ---------------------------------------------------------------------
 	 * Lower EL using AArch64 : 0x400 - 0x600
@@ -238,24 +254,24 @@ vector_entry sync_exception_aarch64
 	 * to a valid cpu context where the general purpose and system register
 	 * state can be saved.
 	 */
+	check_and_unmask_ea
 	handle_sync_exception
-	check_vector_size sync_exception_aarch64
+end_vector_entry sync_exception_aarch64
 
 vector_entry irq_aarch64
+	check_and_unmask_ea
 	handle_interrupt_exception irq_aarch64
-	check_vector_size irq_aarch64
+end_vector_entry irq_aarch64
 
 vector_entry fiq_aarch64
+	check_and_unmask_ea
 	handle_interrupt_exception fiq_aarch64
-	check_vector_size fiq_aarch64
+end_vector_entry fiq_aarch64
 
 vector_entry serror_aarch64
-	/*
-	 * SError exceptions from lower ELs are not currently supported.
-	 * Report their occurrence.
-	 */
-	b	report_unhandled_exception
-	check_vector_size serror_aarch64
+	msr	daifclr, #DAIF_ABT_BIT
+	b	enter_lower_el_async_ea
+end_vector_entry serror_aarch64
 
 	/* ---------------------------------------------------------------------
 	 * Lower EL using AArch32 : 0x600 - 0x800
@@ -268,25 +284,24 @@ vector_entry sync_exception_aarch32
 	 * to a valid cpu context where the general purpose and system register
 	 * state can be saved.
 	 */
+	check_and_unmask_ea
 	handle_sync_exception
-	check_vector_size sync_exception_aarch32
+end_vector_entry sync_exception_aarch32
 
 vector_entry irq_aarch32
+	check_and_unmask_ea
 	handle_interrupt_exception irq_aarch32
-	check_vector_size irq_aarch32
+end_vector_entry irq_aarch32
 
 vector_entry fiq_aarch32
+	check_and_unmask_ea
 	handle_interrupt_exception fiq_aarch32
-	check_vector_size fiq_aarch32
+end_vector_entry fiq_aarch32
 
 vector_entry serror_aarch32
-	/*
-	 * SError exceptions from lower ELs are not currently supported.
-	 * Report their occurrence.
-	 */
-	b	report_unhandled_exception
-	check_vector_size serror_aarch32
-
+	msr	daifclr, #DAIF_ABT_BIT
+	b	enter_lower_el_async_ea
+end_vector_entry serror_aarch32
 
 	/* ---------------------------------------------------------------------
 	 * The following code handles secure monitor calls.
@@ -310,10 +325,8 @@ smc_handler64:
 	 * We already have x0-x4 in place. x5 will point to a cookie (not used
 	 * now). x6 will point to the context structure (SP_EL3) and x7 will
 	 * contain flags we need to pass to the handler.
-	 *
-	 * Save x4-x29 and sp_el0.  Refer to SMCCC v1.1.
 	 */
-	save_x4_to_x29_sp_el0
+	bl	save_gp_registers
 
 	mov	x5, xzr
 	mov	x6, sp
@@ -323,11 +336,22 @@ smc_handler64:
 	ubfx	x15, x0, #FUNCID_TYPE_SHIFT, #FUNCID_TYPE_WIDTH
 	orr	x16, x16, x15, lsl #FUNCID_OEN_WIDTH
 
-	adr	x11, (__RT_SVC_DESCS_START__ + RT_SVC_DESC_HANDLE)
-
 	/* Load descriptor index from array of indices */
 	adr	x14, rt_svc_descs_indices
 	ldrb	w15, [x14, x16]
+
+	/* Any index greater than 127 is invalid. Check bit 7. */
+	tbnz	w15, 7, smc_unknown
+
+	/*
+	 * Get the descriptor using the index
+	 * x11 = (base + off), w15 = index
+	 *
+	 * handler = (base + off) + (index << log2(size))
+	 */
+	adr	x11, (__RT_SVC_DESCS_START__ + RT_SVC_DESC_HANDLE)
+	lsl	w10, w15, #RT_SVC_SIZE_LOG2
+	ldr	x15, [x11, w10, uxtw]
 
 	/*
 	 * Restore the saved C runtime stack value which will become the new
@@ -336,23 +360,8 @@ smc_handler64:
 	 */
 	ldr	x12, [x6, #CTX_EL3STATE_OFFSET + CTX_RUNTIME_SP]
 
-	/*
-	 * Any index greater than 127 is invalid. Check bit 7 for
-	 * a valid index
-	 */
-	tbnz	w15, 7, smc_unknown
-
 	/* Switch to SP_EL0 */
 	msr	spsel, #0
-
-	/*
-	 * Get the descriptor using the index
-	 * x11 = (base + off), x15 = index
-	 *
-	 * handler = (base + off) + (index << log2(size))
-	 */
-	lsl	w10, w15, #RT_SVC_SIZE_LOG2
-	ldr	x15, [x11, w10, uxtw]
 
 	/*
 	 * Save the SPSR_EL3, ELR_EL3, & SCR_EL3 in case there is a world
@@ -384,18 +393,16 @@ smc_handler64:
 
 smc_unknown:
 	/*
-	 * Here we restore x4-x18 regardless of where we came from. AArch32
-	 * callers will find the registers contents unchanged, but AArch64
-	 * callers will find the registers modified (with stale earlier NS
-	 * content). Either way, we aren't leaking any secure information
-	 * through them.
+	 * Unknown SMC call. Populate return value with SMC_UNK, restore
+	 * GP registers, and return to caller.
 	 */
-	mov	w0, #SMC_UNK
-	b	restore_gp_registers_callee_eret
+	mov	x0, #SMC_UNK
+	str	x0, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_X0]
+	b	restore_gp_registers_eret
 
 smc_prohibited:
 	ldr	x30, [sp, #CTX_GPREGS_OFFSET + CTX_GPREG_LR]
-	mov	w0, #SMC_UNK
+	mov	x0, #SMC_UNK
 	eret
 
 rt_svc_fw_critical_error:

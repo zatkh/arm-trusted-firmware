@@ -1,4 +1,4 @@
-ARM CPU Specific Build Macros
+Arm CPU Specific Build Macros
 =============================
 
 
@@ -14,19 +14,33 @@ for a specific CPU on a platform.
 Security Vulnerability Workarounds
 ----------------------------------
 
-ARM Trusted Firmware exports a series of build flags which control which
-security vulnerability workarounds should be applied at runtime.
+TF-A exports a series of build flags which control which security
+vulnerability workarounds should be applied at runtime.
 
 -  ``WORKAROUND_CVE_2017_5715``: Enables the security workaround for
-   `CVE-2017-5715`_. Defaults to 1.
+   `CVE-2017-5715`_. This flag can be set to 0 by the platform if none
+   of the PEs in the system need the workaround. Setting this flag to 0 provides
+   no performance benefit for non-affected platforms, it just helps to comply
+   with the recommendation in the spec regarding workaround discovery.
+   Defaults to 1.
+
+-  ``WORKAROUND_CVE_2018_3639``: Enables the security workaround for
+   `CVE-2018-3639`_. Defaults to 1. The TF-A project recommends to keep
+   the default value of 1 even on platforms that are unaffected by
+   CVE-2018-3639, in order to comply with the recommendation in the spec
+   regarding workaround discovery.
+
+-  ``DYNAMIC_WORKAROUND_CVE_2018_3639``: Enables dynamic mitigation for
+   `CVE-2018-3639`_. This build option should be set to 1 if the target
+   platform contains at least 1 CPU that requires dynamic mitigation.
+   Defaults to 0.
 
 CPU Errata Workarounds
 ----------------------
 
-ARM Trusted Firmware exports a series of build flags which control the
-errata workarounds that are applied to each CPU by the reset handler. The
-errata details can be found in the CPU specific errata documents published
-by ARM:
+TF-A exports a series of build flags which control the errata workarounds that
+are applied to each CPU by the reset handler. The errata details can be found
+in the CPU specific errata documents published by Arm:
 
 -  `Cortex-A53 MPCore Software Developers Errata Notice`_
 -  `Cortex-A57 MPCore Software Developers Errata Notice`_
@@ -54,10 +68,10 @@ In the current implementation, a platform which has more than 1 variant
 with different revisions of a processor has no runtime mechanism available
 for it to specify which errata workarounds should be enabled or not.
 
-The value of the build flags are 0 by default, that is, disabled. Any other
-value will enable it.
+The value of the build flags is 0 by default, that is, disabled. A value of 1
+will enable it.
 
-For Cortex-A53, following errata build flags are defined :
+For Cortex-A53, the following errata build flags are defined :
 
 -  ``ERRATA_A53_826319``: This applies errata 826319 workaround to Cortex-A53
    CPU. This needs to be enabled only for revision <= r0p2 of the CPU.
@@ -79,11 +93,11 @@ For Cortex-A53, following errata build flags are defined :
 -  ``ERRATA_A53_855873``: This applies errata 855873 workaround to Cortex-A53
    CPUs. Though the erratum is present in every revision of the CPU,
    this workaround is only applied to CPUs from r0p3 onwards, which feature
-   a chicken bit in CPUACTLR\_EL1 to enable a hardware workaround.
+   a chicken bit in CPUACTLR_EL1 to enable a hardware workaround.
    Earlier revisions of the CPU have other errata which require the same
    workaround in software, so they should be covered anyway.
 
-For Cortex-A57, following errata build flags are defined :
+For Cortex-A57, the following errata build flags are defined :
 
 -  ``ERRATA_A57_806969``: This applies errata 806969 workaround to Cortex-A57
    CPU. This needs to be enabled only for revision r0p0 of the CPU.
@@ -113,10 +127,32 @@ For Cortex-A57, following errata build flags are defined :
    CPU. This needs to be enabled only for revision <= r1p3 of the CPU.
 
 
-For Cortex-A72, following errata build flags are defined :
+For Cortex-A72, the following errata build flags are defined :
 
 -  ``ERRATA_A72_859971``: This applies errata 859971 workaround to Cortex-A72
    CPU. This needs to be enabled only for revision <= r0p3 of the CPU.
+
+DSU Errata Workarounds
+----------------------
+
+Similar to CPU errata, TF-A also implements workarounds for DSU (DynamIQ
+Shared Unit) errata. The DSU errata details can be found in the respective Arm
+documentation:
+
+- `Arm DSU Software Developers Errata Notice`_.
+
+Each erratum is identified by an ``ID``, as defined in the DSU errata notice
+document. Thus, the build flags which enable/disable the errata workarounds
+have the format ``ERRATA_DSU_<ID>``. The implementation and application logic
+of DSU errata workarounds are similar to `CPU errata workarounds`_.
+
+For DSU errata, the following build flags are defined:
+
+-  ``ERRATA_DSU_936184``: This applies errata 936184 workaround for the
+   affected DSU configurations. This errata applies only for those DSUs that
+   contain the ACP interface **and** the DSU revision is older than r2p0 (on
+   r2p0 it is fixed). However, please note that this workaround results in
+   increased DSU power consumption on idle.
 
 CPU Specific optimizations
 --------------------------
@@ -135,8 +171,8 @@ architecture that can be enabled by the platform as desired.
 -  ``A53_DISABLE_NON_TEMPORAL_HINT``: This flag disables the cache non-temporal
    hint. The LDNP/STNP instructions as implemented on Cortex-A53 do not behave
    in a way most programmers expect, and will most probably result in a
-   significant speed degradation to any code that employs them. The ARMv8-A
-   architecture (see ARM DDI 0487A.h, section D3.4.3) allows cores to ignore
+   significant speed degradation to any code that employs them. The Armv8-A
+   architecture (see Arm DDI 0487A.h, section D3.4.3) allows cores to ignore
    the non-temporal hint and treat LDNP/STNP as LDP/STP instead. Enabling this
    flag enforces this behaviour. This needs to be enabled only for revisions
    <= r0p3 of the CPU and is enabled by default.
@@ -149,11 +185,13 @@ architecture that can be enabled by the platform as desired.
 
 --------------
 
-*Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.*
+*Copyright (c) 2014-2018, Arm Limited and Contributors. All rights reserved.*
 
-.. _CVE-2017-5715: http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=2017-5715
-.. _Cortex-A53 MPCore Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm048406/Cortex_A53_MPCore_Software_Developers_Errata_Notice.pdf
-.. _Cortex-A57 MPCore Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm049219/cortex_a57_mpcore_software_developers_errata_notice.pdf
+.. _CVE-2017-5715: http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-5715
+.. _CVE-2018-3639: http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-3639
+.. _Cortex-A53 MPCore Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm048406/index.html
+.. _Cortex-A57 MPCore Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm049219/index.html
 .. _Cortex-A72 MPCore Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm012079/index.html
 .. _Firmware Design guide: firmware-design.rst
 .. _Cortex-A57 Software Optimization Guide: http://infocenter.arm.com/help/topic/com.arm.doc.uan0015b/Cortex_A57_Software_Optimization_Guide_external.pdf
+.. _Arm DSU Software Developers Errata Notice: http://infocenter.arm.com/help/topic/com.arm.doc.epm138168/index.html

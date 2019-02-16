@@ -12,16 +12,16 @@ the platform by authenticating all firmware images up to and including the
 normal world bootloader. It does this by establishing a Chain of Trust using
 Public-Key-Cryptography Standards (PKCS).
 
-This document describes the design of ARM Trusted Firmware TBB, which is an
-implementation of the Trusted Board Boot Requirements (TBBR) specification,
-ARM DEN0006C-1. It should be used in conjunction with the `Firmware Update`_
+This document describes the design of Trusted Firmware-A (TF-A) TBB, which is
+an implementation of the Trusted Board Boot Requirements (TBBR) specification,
+Arm DEN0006C-1. It should be used in conjunction with the `Firmware Update`_
 design document, which implements a specific aspect of the TBBR.
 
 Chain of Trust
 --------------
 
 A Chain of Trust (CoT) starts with a set of implicitly trusted components. On
-the ARM development platforms, these components are:
+the Arm development platforms, these components are:
 
 -  A SHA-256 hash of the Root of Trust Public Key (ROTPK). It is stored in the
    trusted root-key storage registers.
@@ -39,7 +39,7 @@ Certificate Authority (CA) because the CoT is not established by verifying the
 validity of a certificate's issuer but by the content of the certificate
 extensions. To sign the certificates, the PKCS#1 SHA-256 with RSA Encryption
 signature scheme is used with a RSA key length of 2048 bits. Future version of
-Trusted Firmware will support additional cryptographic algorithms.
+TF-A will support additional cryptographic algorithms.
 
 The certificates are categorised as "Key" and "Content" certificates. Key
 certificates are used to verify public keys which have been used to sign content
@@ -59,7 +59,7 @@ The keys used to establish the CoT are:
 -  **Trusted world key**
 
    The private part is used to sign the key certificates corresponding to the
-   secure world images (SCP\_BL2, BL31 and BL32). The public part is stored in
+   secure world images (SCP_BL2, BL31 and BL32). The public part is stored in
    one of the extension fields in the trusted world certificate.
 
 -  **Non-trusted world key**
@@ -70,7 +70,7 @@ The keys used to establish the CoT are:
 
 -  **BL3-X keys**
 
-   For each of SCP\_BL2, BL31, BL32 and BL33, the private part is used to
+   For each of SCP_BL2, BL31, BL32 and BL33, the private part is used to
    sign the content certificate for the BL3-X image. The public part is stored
    in one of the extension fields in the corresponding key certificate.
 
@@ -78,7 +78,7 @@ The following images are included in the CoT:
 
 -  BL1
 -  BL2
--  SCP\_BL2 (optional)
+-  SCP_BL2 (optional)
 -  BL31
 -  BL33
 -  BL32 (optional)
@@ -96,14 +96,14 @@ The following certificates are used to authenticate the images.
    public part of the trusted world key and the public part of the non-trusted
    world key.
 
--  **SCP\_BL2 key certificate**
+-  **SCP_BL2 key certificate**
 
    It is self-signed with the trusted world key. It contains the public part of
-   the SCP\_BL2 key.
+   the SCP_BL2 key.
 
--  **SCP\_BL2 content certificate**
+-  **SCP_BL2 content certificate**
 
-   It is self-signed with the SCP\_BL2 key. It contains a hash of the SCP\_BL2
+   It is self-signed with the SCP_BL2 key. It contains a hash of the SCP_BL2
    image.
 
 -  **BL31 key certificate**
@@ -133,8 +133,8 @@ The following certificates are used to authenticate the images.
 
    It is self-signed with the BL33 key. It contains a hash of the BL33 image.
 
-The SCP\_BL2 and BL32 certificates are optional, but they must be present if the
-corresponding SCP\_BL2 or BL32 images are present.
+The SCP_BL2 and BL32 certificates are optional, but they must be present if the
+corresponding SCP_BL2 or BL32 images are present.
 
 Trusted Board Boot Sequence
 ---------------------------
@@ -148,7 +148,7 @@ if any of the steps fail.
    registers. If they match, the BL2 hash is read from the certificate.
 
    Note: the matching operation is platform specific and is currently
-   unimplemented on the ARM development platforms.
+   unimplemented on the Arm development platforms.
 
 -  BL1 loads the BL2 image. Its hash is calculated and compared with the hash
    read from the certificate. Control is transferred to the BL2 image if all
@@ -160,8 +160,8 @@ if any of the steps fail.
    registers. If the comparison succeeds, BL2 reads and saves the trusted and
    non-trusted world public keys from the verified certificate.
 
-The next two steps are executed for each of the SCP\_BL2, BL31 & BL32 images.
-The steps for the optional SCP\_BL2 and BL32 images are skipped if these images
+The next two steps are executed for each of the SCP_BL2, BL31 & BL32 images.
+The steps for the optional SCP_BL2 and BL32 images are skipped if these images
 are not present.
 
 -  BL2 loads and verifies the BL3x key certificate. The certificate signature
@@ -196,7 +196,7 @@ enabled through use of specific build flags as described in the `User Guide`_.
 On the host machine, a tool generates the certificates, which are included in
 the FIP along with the boot loader images. These certificates are loaded in
 Trusted SRAM using the IO storage framework. They are then verified by an
-Authentication module included in the Trusted Firmware.
+Authentication module included in TF-A.
 
 The mechanism used for generating the FIP and the Authentication module are
 described in the following sections.
@@ -204,9 +204,9 @@ described in the following sections.
 Authentication Framework
 ------------------------
 
-The authentication framework included in the Trusted Firmware provides support
-to implement the desired trusted boot sequence. ARM platforms use this framework
-to implement the boot requirements specified in the TBBR-client document.
+The authentication framework included in TF-A provides support to implement
+the desired trusted boot sequence. Arm platforms use this framework to
+implement the boot requirements specified in the TBBR-client document.
 
 More information about the authentication framework can be found in the
 `Auth Framework`_ document.
@@ -215,8 +215,8 @@ Certificate Generation Tool
 ---------------------------
 
 The ``cert_create`` tool is built and runs on the host machine as part of the
-Trusted Firmware build process when ``GENERATE_COT=1``. It takes the boot loader
-images and keys as inputs (keys must be in PEM format) and generates the
+TF-A build process when ``GENERATE_COT=1``. It takes the boot loader images
+and keys as inputs (keys must be in PEM format) and generates the
 certificates (in DER format) required to establish the CoT. New keys can be
 generated by the tool in case they are not provided. The certificates are then
 passed as inputs to the ``fiptool`` utility for creating the FIP.
@@ -230,9 +230,9 @@ for building and using the tool can be found in the `User Guide`_.
 
 --------------
 
-*Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.*
+*Copyright (c) 2015-2018, Arm Limited and Contributors. All rights reserved.*
 
 .. _Firmware Update: firmware-update.rst
-.. _X.509 v3: http://www.ietf.org/rfc/rfc5280.txt
+.. _X.509 v3: https://tools.ietf.org/rfc/rfc5280.txt
 .. _User Guide: user-guide.rst
 .. _Auth Framework: auth-framework.rst

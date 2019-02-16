@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __TBBR_OID_H__
-#define __TBBR_OID_H__
+#ifndef TBBR_OID_H
+#define TBBR_OID_H
 
 /*
  * The following is a list of OID values defined and reserved by ARM, which
@@ -41,7 +41,8 @@
 
 /* TrustedBootFirmwareHash - BL2 */
 #define TRUSTED_BOOT_FW_HASH_OID		"1.3.6.1.4.1.4128.2100.201"
-
+#define TRUSTED_BOOT_FW_CONFIG_HASH_OID		"1.3.6.1.4.1.4128.2100.202"
+#define HW_CONFIG_HASH_OID			"1.3.6.1.4.1.4128.2100.203"
 
 /*
  * Trusted Key Certificate
@@ -74,7 +75,6 @@
 /* SoCFirmwareContentCertPK */
 #define SOC_FW_CONTENT_CERT_PK_OID		"1.3.6.1.4.1.4128.2100.501"
 
-
 /*
  * SoC Firmware Content Certificate
  */
@@ -85,7 +85,8 @@
 #define SOC_CONFIG_HASH_OID			"1.3.6.1.4.1.4128.2100.602"
 /* SoCAPFirmwareHash - BL31 */
 #define SOC_AP_FW_HASH_OID			"1.3.6.1.4.1.4128.2100.603"
-
+/* SoCFirmwareConfigHash = SOC_FW_CONFIG */
+#define SOC_FW_CONFIG_HASH_OID			"1.3.6.1.4.1.4128.2100.604"
 
 /*
  * SCP Firmware Key Certificate
@@ -123,6 +124,8 @@
 #define TRUSTED_OS_FW_EXTRA1_HASH_OID		"1.3.6.1.4.1.4128.2100.1002"
 /* TrustedOSExtra2FirmwareHash - BL32 Extra2 */
 #define TRUSTED_OS_FW_EXTRA2_HASH_OID		"1.3.6.1.4.1.4128.2100.1003"
+/* TrustedOSFirmwareConfigHash - TOS_FW_CONFIG */
+#define TRUSTED_OS_FW_CONFIG_HASH_OID		"1.3.6.1.4.1.4128.2100.1004"
 
 
 /*
@@ -139,5 +142,7 @@
 
 /* NonTrustedWorldBootloaderHash - BL33 */
 #define NON_TRUSTED_WORLD_BOOTLOADER_HASH_OID	"1.3.6.1.4.1.4128.2100.1201"
+/* NonTrustedFirmwareConfigHash - NT_FW_CONFIG */
+#define NON_TRUSTED_FW_CONFIG_HASH_OID		"1.3.6.1.4.1.4128.2100.1202"
 
-#endif /* __TBBR_OID_H__ */
+#endif /* TBBR_OID_H */

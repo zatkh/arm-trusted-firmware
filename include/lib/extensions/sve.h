@@ -1,12 +1,15 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __SVE_H__
-#define __SVE_H__
+#ifndef SVE_H
+#define SVE_H
 
-void sve_enable(int el2_unused);
+#include <stdbool.h>
 
-#endif /* __SVE_H__ */
+bool sve_supported(void);
+void sve_enable(bool el2_unused);
+
+#endif /* SVE_H */

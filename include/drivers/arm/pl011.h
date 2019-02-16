@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2013-2014, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PL011_H__
-#define __PL011_H__
+#ifndef PL011_H
+#define PL011_H
 
-#include <console.h>
+#include <drivers/console.h>
 
 /* PL011 Registers */
 #define UARTDR                    0x000
@@ -85,7 +85,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <types.h>
+#include <stdint.h>
 
 typedef struct {
 	console_t console;
@@ -103,4 +103,4 @@ int console_pl011_register(uintptr_t baseaddr, uint32_t clock, uint32_t baud,
 
 #endif /*__ASSEMBLY__*/
 
-#endif	/* __PL011_H__ */
+#endif /* PL011_H */

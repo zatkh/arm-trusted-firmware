@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2015-2019, ARM Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -177,7 +177,7 @@ endef
 # GZIP
 define GZIP_RULE
 $(1): $(2)
-	@echo "  GZIP    $$@"
+	$(ECHO) "  GZIP    $$@"
 	$(Q)gzip -n -f -9 $$< --stdout > $$@
 endef
 
@@ -189,6 +189,40 @@ GZIP_SUFFIX := .gz
 
 MAKE_DEP = -Wp,-MD,$(DEP) -MT $$@ -MP
 
+
+# MAKE_C_LIB builds a C source file and generates the dependency file
+#   $(1) = output directory
+#   $(2) = source file (%.c)
+#   $(3) = library name
+define MAKE_C_LIB
+$(eval OBJ := $(1)/$(patsubst %.c,%.o,$(notdir $(2))))
+$(eval DEP := $(patsubst %.o,%.d,$(OBJ)))
+
+$(OBJ): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | lib$(3)_dirs
+	$$(ECHO) "  CC      $$<"
+	$$(Q)$$(CC) $$(TF_CFLAGS) $$(CFLAGS) $(MAKE_DEP) -c $$< -o $$@
+
+-include $(DEP)
+
+endef
+
+# MAKE_S_LIB builds an assembly source file and generates the dependency file
+#   $(1) = output directory
+#   $(2) = source file (%.S)
+#   $(3) = library name
+define MAKE_S_LIB
+$(eval OBJ := $(1)/$(patsubst %.S,%.o,$(notdir $(2))))
+$(eval DEP := $(patsubst %.o,%.d,$(OBJ)))
+
+$(OBJ): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | lib$(3)_dirs
+	$$(ECHO) "  AS      $$<"
+	$$(Q)$$(AS) $$(ASFLAGS) $(MAKE_DEP) -c $$< -o $$@
+
+-include $(DEP)
+
+endef
+
+
 # MAKE_C builds a C source file and generates the dependency file
 #   $(1) = output directory
 #   $(2) = source file (%.c)
@@ -198,10 +232,11 @@ define MAKE_C
 $(eval OBJ := $(1)/$(patsubst %.c,%.o,$(notdir $(2))))
 $(eval DEP := $(patsubst %.o,%.d,$(OBJ)))
 $(eval IMAGE := IMAGE_BL$(call uppercase,$(3)))
+$(eval BL_CFLAGS := $(BL$(call uppercase,$(3))_CFLAGS))
 
-$(OBJ): $(2) | bl$(3)_dirs
-	@echo "  CC      $$<"
-	$$(Q)$$(CC) $$(TF_CFLAGS) $$(CFLAGS) -D$(IMAGE) $(MAKE_DEP) -c $$< -o $$@
+$(OBJ): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | bl$(3)_dirs
+	$$(ECHO) "  CC      $$<"
+	$$(Q)$$(CC) $$(TF_CFLAGS) $$(CFLAGS) $(BL_CFLAGS) -D$(IMAGE) $(MAKE_DEP) -c $$< -o $$@
 
 -include $(DEP)
 
@@ -218,8 +253,8 @@ $(eval OBJ := $(1)/$(patsubst %.S,%.o,$(notdir $(2))))
 $(eval DEP := $(patsubst %.o,%.d,$(OBJ)))
 $(eval IMAGE := IMAGE_BL$(call uppercase,$(3)))
 
-$(OBJ): $(2) | bl$(3)_dirs
-	@echo "  AS      $$<"
+$(OBJ): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | bl$(3)_dirs
+	$$(ECHO) "  AS      $$<"
 	$$(Q)$$(AS) $$(ASFLAGS) -D$(IMAGE) $(MAKE_DEP) -c $$< -o $$@
 
 -include $(DEP)
@@ -234,13 +269,30 @@ endef
 define MAKE_LD
 
 $(eval DEP := $(1).d)
+$(eval IMAGE := IMAGE_BL$(call uppercase,$(3)))
 
-$(1): $(2) | bl$(3)_dirs
-	@echo "  PP      $$<"
-	$$(Q)$$(CPP) $$(CPPFLAGS) -P -D__ASSEMBLY__ -D__LINKER__ $(MAKE_DEP) -o $$@ $$<
+$(1): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | bl$(3)_dirs
+	$$(ECHO) "  PP      $$<"
+	$$(Q)$$(CPP) $$(CPPFLAGS) -P -D__ASSEMBLY__ -D__LINKER__ $(MAKE_DEP) -D$(IMAGE) -o $$@ $$<
 
 -include $(DEP)
 
+endef
+
+# MAKE_LIB_OBJS builds both C and assembly source files
+#   $(1) = output directory
+#   $(2) = list of source files
+#   $(3) = name of the library
+define MAKE_LIB_OBJS
+        $(eval C_OBJS := $(filter %.c,$(2)))
+        $(eval REMAIN := $(filter-out %.c,$(2)))
+        $(eval $(foreach obj,$(C_OBJS),$(call MAKE_C_LIB,$(1),$(obj),$(3))))
+
+        $(eval S_OBJS := $(filter %.S,$(REMAIN)))
+        $(eval REMAIN := $(filter-out %.S,$(REMAIN)))
+        $(eval $(foreach obj,$(S_OBJS),$(call MAKE_S_LIB,$(1),$(obj),$(3))))
+
+        $(and $(REMAIN),$(error Unexpected source files present: $(REMAIN)))
 endef
 
 
@@ -274,6 +326,49 @@ endef
 # This must be set to a C string (including quotes where applicable).
 BUILD_MESSAGE_TIMESTAMP ?= __TIME__", "__DATE__
 
+.PHONY: libraries
+
+# MAKE_LIB_DIRS macro defines the target for the directory where
+# libraries are created
+define MAKE_LIB_DIRS
+        $(eval LIB_DIR    := ${BUILD_PLAT}/lib)
+        $(eval ROMLIB_DIR    := ${BUILD_PLAT}/romlib)
+        $(eval LIBWRAPPER_DIR := ${BUILD_PLAT}/libwrapper)
+        $(eval $(call MAKE_PREREQ_DIR,${LIB_DIR},${BUILD_PLAT}))
+        $(eval $(call MAKE_PREREQ_DIR,${ROMLIB_DIR},${BUILD_PLAT}))
+        $(eval $(call MAKE_PREREQ_DIR,${LIBWRAPPER_DIR},${BUILD_PLAT}))
+endef
+
+# MAKE_LIB macro defines the targets and options to build each BL image.
+# Arguments:
+#   $(1) = Library name
+define MAKE_LIB
+        $(eval BUILD_DIR  := ${BUILD_PLAT}/lib$(1))
+        $(eval LIB_DIR    := ${BUILD_PLAT}/lib)
+        $(eval ROMLIB_DIR    := ${BUILD_PLAT}/romlib)
+        $(eval SOURCES    := $(LIB$(call uppercase,$(1))_SRCS))
+        $(eval OBJS       := $(addprefix $(BUILD_DIR)/,$(call SOURCES_TO_OBJS,$(SOURCES))))
+
+$(eval $(call MAKE_PREREQ_DIR,${BUILD_DIR},${BUILD_PLAT}))
+$(eval $(call MAKE_LIB_OBJS,$(BUILD_DIR),$(SOURCES),$(1)))
+
+.PHONY : lib${1}_dirs
+lib${1}_dirs: | ${BUILD_DIR} ${LIB_DIR}  ${ROMLIB_DIR} ${LIBWRAPPER_DIR}
+libraries: ${LIB_DIR}/lib$(1).a
+LDPATHS = -L${LIB_DIR}
+LDLIBS += -l$(1)
+
+ifeq ($(USE_ROMLIB),1)
+LIBWRAPPER = -lwrappers
+endif
+
+all: ${LIB_DIR}/lib$(1).a
+
+${LIB_DIR}/lib$(1).a: $(OBJS)
+	$$(ECHO) "  AR      $$@"
+	$$(Q)$$(AR) cr $$@ $$?
+endef
+
 # MAKE_BL macro defines the targets and options to build each BL image.
 # Arguments:
 #   $(1) = BL stage (2, 2u, 30, 31, 32, 33)
@@ -290,6 +385,7 @@ define MAKE_BL
         $(eval DUMP       := $(call IMG_DUMP,$(1)))
         $(eval BIN        := $(call IMG_BIN,$(1)))
         $(eval BL_LINKERFILE := $(BL$(call uppercase,$(1))_LINKERFILE))
+        $(eval BL_LIBS    := $(BL$(call uppercase,$(1))_LIBS))
         # We use sort only to get a list of unique object directory names.
         # ordering is not relevant but sort removes duplicates.
         $(eval TEMP_OBJ_DIRS := $(sort $(dir ${OBJS} ${LINKERFILE})))
@@ -312,8 +408,12 @@ bl${1}_dirs: | ${OBJ_DIRS}
 $(eval $(call MAKE_OBJS,$(BUILD_DIR),$(SOURCES),$(1)))
 $(eval $(call MAKE_LD,$(LINKERFILE),$(BL_LINKERFILE),$(1)))
 
-$(ELF): $(OBJS) $(LINKERFILE) | bl$(1)_dirs
-	@echo "  LD      $$@"
+ifeq ($(USE_ROMLIB),1)
+$(ELF): romlib.bin
+endif
+
+$(ELF): $(OBJS) $(LINKERFILE) | bl$(1)_dirs libraries $(BL_LIBS)
+	$$(ECHO) "  LD      $$@"
 ifdef MAKE_BUILD_STRINGS
 	$(call MAKE_BUILD_STRINGS, $(BUILD_DIR)/build_message.o)
 else
@@ -322,14 +422,15 @@ else
 		$$(CC) $$(TF_CFLAGS) $$(CFLAGS) -xc -c - -o $(BUILD_DIR)/build_message.o
 endif
 	$$(Q)$$(LD) -o $$@ $$(TF_LDFLAGS) $$(LDFLAGS) -Map=$(MAPFILE) \
-		--script $(LINKERFILE) $(BUILD_DIR)/build_message.o $(OBJS) $(LDLIBS)
+		--script $(LINKERFILE) $(BUILD_DIR)/build_message.o \
+		$(OBJS) $(LDPATHS) $(LIBWRAPPER) $(LDLIBS) $(BL_LIBS)
 
 $(DUMP): $(ELF)
-	@echo "  OD      $$@"
+	$${ECHO} "  OD      $$@"
 	$${Q}$${OD} -dx $$< > $$@
 
 $(BIN): $(ELF)
-	@echo "  BIN     $$@"
+	$${ECHO} "  BIN     $$@"
 	$$(Q)$$(OC) -O binary $$< $$@
 	@${ECHO_BLANK_LINE}
 	@echo "Built $$@ successfully"
@@ -344,15 +445,18 @@ $(if $(2),$(call TOOL_ADD_IMG_PAYLOAD,bl$(1),$(BIN),--$(2),$(BIN),$(3)))
 
 endef
 
+# Convert device tree source file names to matching blobs
+#   $(1) = input dts
 define SOURCES_TO_DTBS
         $(notdir $(patsubst %.dts,%.dtb,$(filter %.dts,$(1))))
 endef
 
-# MAKE_FDT macro defines the targets and options to build each FDT binary
-# Arguments: (none)
-define MAKE_FDT
-        $(eval DTB_BUILD_DIR  := ${BUILD_PLAT}/fdts)
-        $(eval DTBS       := $(addprefix $(DTB_BUILD_DIR)/,$(call SOURCES_TO_DTBS,$(FDT_SOURCES))))
+# MAKE_FDT_DIRS macro creates the prerequisite directories that host the
+# FDT binaries
+#   $(1) = output directory
+#   $(2) = input dts
+define MAKE_FDT_DIRS
+        $(eval DTBS       := $(addprefix $(1)/,$(call SOURCES_TO_DTBS,$(2))))
         $(eval TEMP_DTB_DIRS := $(sort $(dir ${DTBS})))
         # The $(dir ) function leaves a trailing / on the directory names
         # Rip off the / to match directory names with make rule targets.
@@ -361,22 +465,31 @@ define MAKE_FDT
 $(eval $(foreach objd,${DTB_DIRS},$(call MAKE_PREREQ_DIR,${objd},${BUILD_DIR})))
 
 fdt_dirs: ${DTB_DIRS}
-
 endef
 
-# MAKE_DTB generate the Flattened device tree binary (device tree binary)
+# MAKE_DTB generate the Flattened device tree binary
 #   $(1) = output directory
 #   $(2) = input dts
 define MAKE_DTB
 
-$(eval DOBJ := $(1)/$(patsubst %.dts,%.dtb,$(notdir $(2))))
-$(eval DEP := $(patsubst %.dtb,%.d,$(DOBJ)))
+# List of DTB file(s) to generate, based on DTS file basename list
+$(eval DOBJ := $(addprefix $(1)/,$(call SOURCES_TO_DTBS,$(2))))
+# List of the pre-compiled DTS file(s)
+$(eval DPRE := $(addprefix $(1)/,$(patsubst %.dts,%.pre.dts,$(notdir $(2)))))
+# Dependencies of the pre-compiled DTS file(s) on its source and included files
+$(eval DTSDEP := $(patsubst %.dtb,%.o.d,$(DOBJ)))
+# Dependencies of the DT compilation on its pre-compiled DTS
+$(eval DTBDEP := $(patsubst %.dtb,%.d,$(DOBJ)))
 
-$(DOBJ): $(2) | fdt_dirs
-	@echo "  DTC      $$<"
-	$$(Q)$$(DTC) $$(DTC_FLAGS) -d $(DEP) -o $$@ $$<
+$(DOBJ): $(2) $(filter-out %.d,$(MAKEFILE_LIST)) | fdt_dirs
+	$${ECHO} "  CPP     $$<"
+	$(eval DTBS       := $(addprefix $(1)/,$(call SOURCES_TO_DTBS,$(2))))
+	$$(Q)$$(PP) $$(DTC_CPPFLAGS) -MT $(DTBS) -MMD -MF $(DTSDEP) -o $(DPRE) $$<
+	$${ECHO} "  DTC     $$<"
+	$$(Q)$$(DTC) $$(DTC_FLAGS) -i fdts -d $(DTBDEP) -o $$@ $(DPRE)
 
--include $(DEP)
+-include $(DTBDEP)
+-include $(DTSDEP)
 
 endef
 
@@ -386,7 +499,11 @@ endef
 define MAKE_DTBS
         $(eval DOBJS := $(filter %.dts,$(2)))
         $(eval REMAIN := $(filter-out %.dts,$(2)))
+        $(and $(REMAIN),$(error FDT_SOURCES contain non-DTS files: $(REMAIN)))
         $(eval $(foreach obj,$(DOBJS),$(call MAKE_DTB,$(1),$(obj))))
 
-        $(and $(REMAIN),$(error Unexpected s present: $(REMAIN)))
+        $(eval $(call MAKE_FDT_DIRS,$(1),$(2)))
+
+dtbs: $(DTBS)
+all: dtbs
 endef

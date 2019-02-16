@@ -1,19 +1,19 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <errno.h>
-#include <v2m_def.h>
 
-#define V2M_SYS_NVFLAGS_ADDR		(V2M_SYSREGS_BASE + V2M_SYS_NVFLAGS)
+#include <arch_helpers.h>
+#include <plat/common/platform.h>
+#include <platform_def.h>
 
 /*
  * Juno error handler
  */
-void plat_error_handler(int err)
+void __dead2 plat_arm_error_handler(int err)
 {
 	uint32_t *flags_ptr = (uint32_t *)V2M_SYS_NVFLAGS_ADDR;
 

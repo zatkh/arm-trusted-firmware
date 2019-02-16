@@ -1,13 +1,15 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <bl_common.h>
 #include <platform_def.h>
-#include <arm_xlat_tables.h>
+
+#include <arch_helpers.h>
+#include <common/bl_common.h>
+#include <lib/xlat_tables/xlat_tables_v2.h>
+
 #include "qemu_private.h"
 
 #define MAP_DEVICE0	MAP_REGION_FLAT(DEVICE0_BASE,			\
@@ -104,6 +106,8 @@ static const mmap_region_t plat_qemu_mmap[] = {
 #define DEFINE_CONFIGURE_MMU_EL(_el)					\
 	void qemu_configure_mmu_##_el(unsigned long total_base,	\
 				   unsigned long total_size,		\
+				   unsigned long code_start,		\
+				   unsigned long code_limit,		\
 				   unsigned long ro_start,		\
 				   unsigned long ro_limit,		\
 				   unsigned long coh_start,		\
@@ -112,9 +116,12 @@ static const mmap_region_t plat_qemu_mmap[] = {
 		mmap_add_region(total_base, total_base,			\
 				total_size,				\
 				MT_MEMORY | MT_RW | MT_SECURE);		\
+		mmap_add_region(code_start, code_start,			\
+				code_limit - code_start,		\
+				MT_CODE | MT_SECURE);			\
 		mmap_add_region(ro_start, ro_start,			\
 				ro_limit - ro_start,			\
-				MT_MEMORY | MT_RO | MT_SECURE);		\
+				MT_RO_DATA | MT_SECURE);		\
 		mmap_add_region(coh_start, coh_start,			\
 				coh_limit - coh_start,			\
 				MT_DEVICE | MT_RW | MT_SECURE);		\
@@ -126,7 +133,7 @@ static const mmap_region_t plat_qemu_mmap[] = {
 
 /* Define EL1 and EL3 variants of the function initialising the MMU */
 #ifdef AARCH32
-DEFINE_CONFIGURE_MMU_EL(secure)
+DEFINE_CONFIGURE_MMU_EL(svc_mon)
 #else
 DEFINE_CONFIGURE_MMU_EL(el1)
 DEFINE_CONFIGURE_MMU_EL(el3)

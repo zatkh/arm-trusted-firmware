@@ -9,8 +9,8 @@
  * the execution environment.
  */
 
-#ifndef _PM_CLIENT_H_
-#define _PM_CLIENT_H_
+#ifndef PM_CLIENT_H
+#define PM_CLIENT_H
 
 #include "pm_common.h"
 #include "pm_defs.h"
@@ -20,8 +20,10 @@ void pm_client_suspend(const struct pm_proc *proc, unsigned int state);
 void pm_client_abort_suspend(void);
 void pm_client_wakeup(const struct pm_proc *proc);
 enum pm_ret_status set_ocm_retention(void);
+enum pm_ret_status pm_set_suspend_mode(uint32_t mode);
+const struct pm_proc *pm_get_proc_by_node(enum pm_node_id nid);
 
 /* Global variables to be set in pm_client.c */
 extern const struct pm_proc *primary_proc;
 
-#endif /* _PM_CLIENT_H_ */
+#endif /* PM_CLIENT_H */

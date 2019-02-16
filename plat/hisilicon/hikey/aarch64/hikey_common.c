@@ -1,23 +1,23 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <arm_gic.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <debug.h>
-#include <mmio.h>
-#include <platform.h>
-#include <platform_def.h>
-#include <xlat_tables.h>
 
-#include "../hikey_def.h"
+#include <arch_helpers.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <lib/mmio.h>
+#include <lib/xlat_tables/xlat_tables.h>
+#include <plat/common/platform.h>
+
+#include <hikey_def.h>
+#include <hikey_layout.h>
 
 #define MAP_DDR		MAP_REGION_FLAT(DDR_BASE,			\
-					DDR_SIZE,			\
+					DDR_SIZE - DDR_SEC_SIZE,	\
 					MT_DEVICE | MT_RW | MT_NS)
 
 #define MAP_DEVICE	MAP_REGION_FLAT(DEVICE_BASE,			\
@@ -27,15 +27,6 @@
 #define MAP_TSP_MEM	MAP_REGION_FLAT(TSP_SEC_MEM_BASE,		\
 					TSP_SEC_MEM_SIZE,		\
 					MT_MEMORY | MT_RW | MT_SECURE)
-
-#if LOAD_IMAGE_V2
-#ifdef SPD_opteed
-#define MAP_OPTEE_PAGEABLE	MAP_REGION_FLAT(		\
-					HIKEY_OPTEE_PAGEABLE_LOAD_BASE,	\
-					HIKEY_OPTEE_PAGEABLE_LOAD_SIZE,	\
-					MT_MEMORY | MT_RW | MT_SECURE)
-#endif
-#endif
 
 #define MAP_ROM_PARAM	MAP_REGION_FLAT(XG2RAM0_BASE,			\
 					BL1_XG2RAM0_OFFSET,		\
@@ -73,11 +64,7 @@ static const mmap_region_t hikey_mmap[] = {
 	MAP_DDR,
 	MAP_DEVICE,
 	MAP_TSP_MEM,
-#if LOAD_IMAGE_V2
-#ifdef SPD_opteed
-	MAP_OPTEE_PAGEABLE,
-#endif
-#endif
+	MAP_SRAM,
 	{0}
 };
 #endif

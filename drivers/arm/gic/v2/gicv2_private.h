@@ -4,25 +4,18 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __GICV2_PRIVATE_H__
-#define __GICV2_PRIVATE_H__
+#ifndef GICV2_PRIVATE_H
+#define GICV2_PRIVATE_H
 
-#include <gicv2.h>
-#include <mmio.h>
 #include <stdint.h>
+
+#include <drivers/arm/gicv2.h>
+#include <lib/mmio.h>
 
 /*******************************************************************************
  * Private function prototypes
  ******************************************************************************/
 void gicv2_spis_configure_defaults(uintptr_t gicd_base);
-#if !ERROR_DEPRECATED
-void gicv2_secure_spis_configure(uintptr_t gicd_base,
-				     unsigned int num_ints,
-				     const unsigned int *sec_intr_list);
-void gicv2_secure_ppi_sgi_setup(uintptr_t gicd_base,
-					unsigned int num_ints,
-					const unsigned int *sec_intr_list);
-#endif
 void gicv2_secure_spis_configure_props(uintptr_t gicd_base,
 		const interrupt_prop_t *interrupt_props,
 		unsigned int interrupt_props_num);
@@ -50,7 +43,9 @@ static inline unsigned int gicd_get_itargetsr(uintptr_t base, unsigned int id)
 static inline void gicd_set_itargetsr(uintptr_t base, unsigned int id,
 		unsigned int target)
 {
-	mmio_write_8(base + GICD_ITARGETSR + id, target & GIC_TARGET_CPU_MASK);
+	uint8_t val = target & GIC_TARGET_CPU_MASK;
+
+	mmio_write_8(base + GICD_ITARGETSR + id, val);
 }
 
 static inline void gicd_write_sgir(uintptr_t base, unsigned int val)
@@ -152,4 +147,4 @@ static inline void gicc_write_dir(uintptr_t base, unsigned int val)
 	mmio_write_32(base + GICC_DIR, val);
 }
 
-#endif /* __GICV2_PRIVATE_H__ */
+#endif /* GICV2_PRIVATE_H */

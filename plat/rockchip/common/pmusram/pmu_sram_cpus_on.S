@@ -12,7 +12,6 @@
 	.macro pmusram_entry_func _name
 	.section .pmusram.entry, "ax"
 	.type \_name, %function
-	.func \_name
 	.cfi_startproc
 	\_name:
 	.endm
@@ -49,5 +48,5 @@ ddr_resume:
 #endif
 	bl	sram_restore
 sys_resume:
-	bl	psci_entrypoint
+	bl	bl31_warm_entrypoint
 endfunc pmu_cpuson_entrypoint

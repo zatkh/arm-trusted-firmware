@@ -1,15 +1,17 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bakery_lock.h>
-#include <cpu_data.h>
-#include <platform.h>
 #include <string.h>
+
+#include <arch_helpers.h>
+#include <lib/bakery_lock.h>
+#include <lib/el3_runtime/cpu_data.h>
+#include <lib/utils_def.h>
+#include <plat/common/platform.h>
 
 /*
  * Functions in this file implement Bakery Algorithm for mutual exclusion with the
@@ -49,25 +51,36 @@ CASSERT((PLAT_PERCPU_BAKERY_LOCK_SIZE & (CACHE_WRITEBACK_GRANULE - 1)) == 0, \
  * Use the linker defined symbol which has evaluated the size reqiurement.
  * This is not as efficient as using a platform defined constant
  */
-extern void *__PERCPU_BAKERY_LOCK_SIZE__;
-#define PERCPU_BAKERY_LOCK_SIZE ((uintptr_t)&__PERCPU_BAKERY_LOCK_SIZE__)
+IMPORT_SYM(uintptr_t, __PERCPU_BAKERY_LOCK_START__, BAKERY_LOCK_START);
+IMPORT_SYM(uintptr_t, __PERCPU_BAKERY_LOCK_END__, BAKERY_LOCK_END);
+#define PERCPU_BAKERY_LOCK_SIZE (BAKERY_LOCK_END - BAKERY_LOCK_START)
 #endif
 
-#define get_bakery_info(cpu_ix, lock)	\
-	(bakery_info_t *)((uintptr_t)lock + cpu_ix * PERCPU_BAKERY_LOCK_SIZE)
+static inline bakery_lock_t *get_bakery_info(unsigned int cpu_ix,
+					     bakery_lock_t *lock)
+{
+	return (bakery_info_t *)((uintptr_t)lock +
+				cpu_ix * PERCPU_BAKERY_LOCK_SIZE);
+}
 
-#define write_cache_op(addr, cached)	\
-				do {	\
-					(cached ? dccvac((uintptr_t)addr) :\
-						dcivac((uintptr_t)addr));\
-						dsbish();\
-				} while (0)
+static inline void write_cache_op(uintptr_t addr, bool cached)
+{
+	if (cached)
+		dccvac(addr);
+	else
+		dcivac(addr);
 
-#define read_cache_op(addr, cached)	if (cached) \
-					    dccivac((uintptr_t)addr)
+	dsbish();
+}
+
+static inline void read_cache_op(uintptr_t addr, bool cached)
+{
+	if (cached)
+		dccivac(addr);
+}
 
 /* Helper function to check if the lock is acquired */
-static inline int is_lock_acquired(const bakery_info_t *my_bakery_info,
+static inline bool is_lock_acquired(const bakery_info_t *my_bakery_info,
 							int is_cached)
 {
 	/*
@@ -78,8 +91,8 @@ static inline int is_lock_acquired(const bakery_info_t *my_bakery_info,
 	 * operations were not propagated to all the caches in the system.
 	 * Hence do a `read_cache_op()` prior to read.
 	 */
-	read_cache_op(my_bakery_info, is_cached);
-	return !!(bakery_ticket_number(my_bakery_info->lock_data));
+	read_cache_op((uintptr_t)my_bakery_info, is_cached);
+	return bakery_ticket_number(my_bakery_info->lock_data) != 0U;
 }
 
 static unsigned int bakery_get_ticket(bakery_lock_t *lock,
@@ -94,7 +107,7 @@ static unsigned int bakery_get_ticket(bakery_lock_t *lock,
 	 * it is not NULL.
 	 */
 	my_bakery_info = get_bakery_info(me, lock);
-	assert(my_bakery_info);
+	assert(my_bakery_info != NULL);
 
 	/* Prevent recursive acquisition.*/
 	assert(!is_lock_acquired(my_bakery_info, is_cached));
@@ -103,16 +116,16 @@ static unsigned int bakery_get_ticket(bakery_lock_t *lock,
 	 * Tell other contenders that we are through the bakery doorway i.e.
 	 * going to allocate a ticket for this cpu.
 	 */
-	my_ticket = 0;
+	my_ticket = 0U;
 	my_bakery_info->lock_data = make_bakery_data(CHOOSING_TICKET, my_ticket);
 
-	write_cache_op(my_bakery_info, is_cached);
+	write_cache_op((uintptr_t)my_bakery_info, is_cached);
 
 	/*
 	 * Iterate through the bakery information of each contender to allocate
 	 * the highest ticket number for this cpu.
 	 */
-	for (they = 0; they < BAKERY_LOCK_MAX_CPUS; they++) {
+	for (they = 0U; they < BAKERY_LOCK_MAX_CPUS; they++) {
 		if (me == they)
 			continue;
 
@@ -121,9 +134,9 @@ static unsigned int bakery_get_ticket(bakery_lock_t *lock,
 		 * ensure that a stale copy is not read.
 		 */
 		their_bakery_info = get_bakery_info(they, lock);
-		assert(their_bakery_info);
+		assert(their_bakery_info != NULL);
 
-		read_cache_op(their_bakery_info, is_cached);
+		read_cache_op((uintptr_t)their_bakery_info, is_cached);
 
 		/*
 		 * Update this cpu's ticket number if a higher ticket number is
@@ -141,7 +154,7 @@ static unsigned int bakery_get_ticket(bakery_lock_t *lock,
 	++my_ticket;
 	my_bakery_info->lock_data = make_bakery_data(CHOSEN_TICKET, my_ticket);
 
-	write_cache_op(my_bakery_info, is_cached);
+	write_cache_op((uintptr_t)my_bakery_info, is_cached);
 
 	return my_ticket;
 }
@@ -167,8 +180,8 @@ void bakery_lock_get(bakery_lock_t *lock)
 	 * Now that we got our ticket, compute our priority value, then compare
 	 * with that of others, and proceed to acquire the lock
 	 */
-	my_prio = PRIORITY(my_ticket, me);
-	for (they = 0; they < BAKERY_LOCK_MAX_CPUS; they++) {
+	my_prio = bakery_get_priority(my_ticket, me);
+	for (they = 0U; they < BAKERY_LOCK_MAX_CPUS; they++) {
 		if (me == they)
 			continue;
 
@@ -177,11 +190,11 @@ void bakery_lock_get(bakery_lock_t *lock)
 		 * ensure that a stale copy is not read.
 		 */
 		their_bakery_info = get_bakery_info(they, lock);
-		assert(their_bakery_info);
+		assert(their_bakery_info != NULL);
 
 		/* Wait for the contender to get their ticket */
 		do {
-			read_cache_op(their_bakery_info, is_cached);
+			read_cache_op((uintptr_t)their_bakery_info, is_cached);
 			their_bakery_data = their_bakery_info->lock_data;
 		} while (bakery_is_choosing(their_bakery_data));
 
@@ -190,7 +203,7 @@ void bakery_lock_get(bakery_lock_t *lock)
 		 * (valid) ticket value. If they do, compare priorities
 		 */
 		their_ticket = bakery_ticket_number(their_bakery_data);
-		if (their_ticket && (PRIORITY(their_ticket, they) < my_prio)) {
+		if (their_ticket && (bakery_get_priority(their_ticket, they) < my_prio)) {
 			/*
 			 * They have higher priority (lower value). Wait for
 			 * their ticket value to change (either release the lock
@@ -199,12 +212,17 @@ void bakery_lock_get(bakery_lock_t *lock)
 			 */
 			do {
 				wfe();
-				read_cache_op(their_bakery_info, is_cached);
+				read_cache_op((uintptr_t)their_bakery_info, is_cached);
 			} while (their_ticket
 				== bakery_ticket_number(their_bakery_info->lock_data));
 		}
 	}
-	/* Lock acquired */
+
+	/*
+	 * Lock acquired. Ensure that any reads from a shared resource in the
+	 * critical section read values after the lock is acquired.
+	 */
+	dmbld();
 }
 
 void bakery_lock_release(bakery_lock_t *lock)
@@ -220,7 +238,13 @@ void bakery_lock_release(bakery_lock_t *lock)
 
 	assert(is_lock_acquired(my_bakery_info, is_cached));
 
-	my_bakery_info->lock_data = 0;
-	write_cache_op(my_bakery_info, is_cached);
+	/*
+	 * Ensure that other observers see any stores in the critical section
+	 * before releasing the lock. Release the lock by resetting ticket.
+	 * Then signal other waiting contenders.
+	 */
+	dmbst();
+	my_bakery_info->lock_data = 0U;
+	write_cache_op((uintptr_t)my_bakery_info, is_cached);
 	sev();
 }

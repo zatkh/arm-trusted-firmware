@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __COREBOOT_H__
-#define __COREBOOT_H__
+#ifndef COREBOOT_H
+#define COREBOOT_H
 
-#include <types.h>
+#include <stdint.h>
 
 typedef struct {
 	uint32_t type;			/* always 2 (memory-mapped) on ARM */
@@ -21,4 +21,4 @@ extern coreboot_serial_t coreboot_serial;
 
 void coreboot_table_setup(void *base);
 
-#endif /* __COREBOOT_H__ */
+#endif /* COREBOOT_H */

@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __ASM_MACROS_COMMON_S__
-#define __ASM_MACROS_COMMON_S__
+#ifndef ASM_MACROS_COMMON_S
+#define ASM_MACROS_COMMON_S
 
 	/*
 	 * This macro is used to create a function label and place the
@@ -31,7 +31,6 @@
 	.cfi_sections .debug_frame
 	.section .text.asm.\_name, "ax"
 	.type \_name, %function
-	.func \_name
 	/*
 	 * .cfi_startproc and .cfi_endproc are needed to output entries in
 	 * .debug_frame
@@ -45,7 +44,6 @@
 	 * This macro is used to mark the end of a function.
 	 */
 	.macro endfunc _name
-	.endfunc
 	.cfi_endproc
 	.size \_name, . - \_name
 	.endm
@@ -106,4 +104,4 @@
 	.endm
 
 
-#endif /* __ASM_MACROS_COMMON_S__ */
+#endif /* ASM_MACROS_COMMON_S */

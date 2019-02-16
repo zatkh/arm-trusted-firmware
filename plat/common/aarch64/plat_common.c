@@ -1,41 +1,32 @@
 /*
- * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <console.h>
-#include <platform.h>
-#include <xlat_mmu_helpers.h>
+
+#include <arch_helpers.h>
+#include <drivers/console.h>
+#if RAS_EXTENSION
+#include <lib/extensions/ras.h>
+#endif
+#include <lib/xlat_tables/xlat_mmu_helpers.h>
+#include <plat/common/platform.h>
 
 /*
  * The following platform setup functions are weakly defined. They
  * provide typical implementations that may be re-used by multiple
  * platforms but may also be overridden by a platform if required.
  */
-#pragma weak bl31_plat_enable_mmu
-#pragma weak bl32_plat_enable_mmu
 #pragma weak bl31_plat_runtime_setup
-#if !ERROR_DEPRECATED
-#pragma weak plat_get_syscnt_freq2
-#endif /* ERROR_DEPRECATED */
 
 #if SDEI_SUPPORT
 #pragma weak plat_sdei_handle_masked_trigger
 #pragma weak plat_sdei_validate_entry_point
 #endif
 
-void bl31_plat_enable_mmu(uint32_t flags)
-{
-	enable_mmu_el3(flags);
-}
-
-void bl32_plat_enable_mmu(uint32_t flags)
-{
-	enable_mmu_el1(flags);
-}
+#pragma weak plat_ea_handler
 
 void bl31_plat_runtime_setup(void)
 {
@@ -46,7 +37,6 @@ void bl31_plat_runtime_setup(void)
 #endif
 }
 
-#if !ENABLE_PLAT_COMPAT
 /*
  * Helper function for platform_get_pos() when platform compatibility is
  * disabled. This is to enable SPDs using the older platform API to continue
@@ -58,19 +48,6 @@ unsigned int platform_core_pos_helper(unsigned long mpidr)
 	assert(idx >= 0);
 	return idx;
 }
-#endif
-
-
-#if !ERROR_DEPRECATED
-unsigned int plat_get_syscnt_freq2(void)
-{
-	unsigned long long freq = plat_get_syscnt_freq();
-
-	assert(freq >> 32 == 0);
-
-	return (unsigned int)freq;
-}
-#endif /* ERROR_DEPRECATED */
 
 #if SDEI_SUPPORT
 /*
@@ -78,7 +55,7 @@ unsigned int plat_get_syscnt_freq2(void)
  */
 void plat_sdei_handle_masked_trigger(uint64_t mpidr, unsigned int intr)
 {
-	WARN("Spurious SDEI interrupt %u on masked PE %lx\n", intr, mpidr);
+	WARN("Spurious SDEI interrupt %u on masked PE %llx\n", intr, mpidr);
 }
 
 /*
@@ -90,3 +67,20 @@ int plat_sdei_validate_entry_point(uintptr_t ep, unsigned int client_mode)
 	return 0;
 }
 #endif
+
+/* RAS functions common to AArch64 ARM platforms */
+void plat_ea_handler(unsigned int ea_reason, uint64_t syndrome, void *cookie,
+		void *handle, uint64_t flags)
+{
+#if RAS_EXTENSION
+	/* Call RAS EA handler */
+	int handled = ras_ea_handler(ea_reason, syndrome, cookie, handle, flags);
+	if (handled != 0)
+		return;
+#endif
+
+	ERROR("Unhandled External Abort received on 0x%lx at EL3!\n",
+			read_mpidr_el1());
+	ERROR(" exception reason=%u syndrome=0x%llx\n", ea_reason, syndrome);
+	panic();
+}

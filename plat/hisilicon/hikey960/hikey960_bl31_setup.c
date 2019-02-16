@@ -4,61 +4,49 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <arm_gic.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <cci.h>
-#include <console.h>
-#include <debug.h>
 #include <errno.h>
-#include <generic_delay_timer.h>
-#include <gicv2.h>
-#include <hi3660.h>
-#include <hisi_ipc.h>
-#include <interrupt_mgmt.h>
-#include <platform.h>
+
 #include <platform_def.h>
 
+#include <arch_helpers.h>
+#include <bl31/interrupt_mgmt.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/interrupt_props.h>
+#include <drivers/arm/cci.h>
+#include <drivers/arm/gicv2.h>
+#include <drivers/arm/pl011.h>
+#include <drivers/console.h>
+#include <drivers/generic_delay_timer.h>
+#include <lib/mmio.h>
+#include <plat/common/platform.h>
+
+#include <hi3660.h>
+#include <hisi_ipc.h>
 #include "hikey960_def.h"
 #include "hikey960_private.h"
 
-/*
- * The next 2 constants identify the extents of the code & RO data region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __RO_START__ and __RO_END__ linker symbols refer to page-aligned addresses.
- */
-#define BL31_RO_BASE	(unsigned long)(&__RO_START__)
-#define BL31_RO_LIMIT	(unsigned long)(&__RO_END__)
-
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols refer to
- * page-aligned addresses.
- */
-#define BL31_COHERENT_RAM_BASE	(unsigned long)(&__COHERENT_RAM_START__)
-#define BL31_COHERENT_RAM_LIMIT	(unsigned long)(&__COHERENT_RAM_END__)
-
 static entry_point_info_t bl32_ep_info;
 static entry_point_info_t bl33_ep_info;
+static console_pl011_t console;
 
 /******************************************************************************
  * On a GICv2 system, the Group 1 secure interrupts are treated as Group 0
  * interrupts.
  *****************************************************************************/
-const unsigned int g0_interrupt_array[] = {
-	IRQ_SEC_PHY_TIMER,
-	IRQ_SEC_SGI_0
+static const interrupt_prop_t g0_interrupt_props[] = {
+	INTR_PROP_DESC(IRQ_SEC_PHY_TIMER, GIC_HIGHEST_SEC_PRIORITY,
+		       GICV2_INTR_GROUP0, GIC_INTR_CFG_LEVEL),
+	INTR_PROP_DESC(IRQ_SEC_SGI_0, GIC_HIGHEST_SEC_PRIORITY,
+		       GICV2_INTR_GROUP0, GIC_INTR_CFG_LEVEL),
 };
 
 const gicv2_driver_data_t hikey960_gic_data = {
 	.gicd_base = GICD_REG_BASE,
 	.gicc_base = GICC_REG_BASE,
-	.g0_interrupt_num = ARRAY_SIZE(g0_interrupt_array),
-	.g0_interrupt_array = g0_interrupt_array,
+	.interrupt_props = g0_interrupt_props,
+	.interrupt_props_num = ARRAY_SIZE(g0_interrupt_props),
 };
 
 static const int cci_map[] = {
@@ -78,15 +66,13 @@ entry_point_info_t *bl31_plat_get_next_image_ep_info(uint32_t type)
 	return NULL;
 }
 
-#if LOAD_IMAGE_V2
-void bl31_early_platform_setup(void *from_bl2,
-			       void *plat_params_from_bl2)
-#else
-void bl31_early_platform_setup(bl31_params_t *from_bl2,
-		void *plat_params_from_bl2)
-#endif
+void bl31_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+				u_register_t arg2, u_register_t arg3)
 {
 	unsigned int id, uart_base;
+	void *from_bl2;
+
+	from_bl2 = (void *) arg0;
 
 	generic_delay_timer_init();
 	hikey960_read_boardid(&id);
@@ -96,13 +82,13 @@ void bl31_early_platform_setup(bl31_params_t *from_bl2,
 		uart_base = PL011_UART6_BASE;
 
 	/* Initialize the console to provide early debug support */
-	console_init(uart_base, PL011_UART_CLK_IN_HZ, PL011_BAUDRATE);
+	console_pl011_register(uart_base, PL011_UART_CLK_IN_HZ,
+			       PL011_BAUDRATE, &console);
 
 	/* Initialize CCI driver */
 	cci_init(CCI400_REG_BASE, cci_map, ARRAY_SIZE(cci_map));
 	cci_enable_snoop_dvm_reqs(MPIDR_AFFLVL1_VAL(read_mpidr_el1()));
 
-#if LOAD_IMAGE_V2
 	/*
 	 * Check params passed from BL2 should not be NULL,
 	 */
@@ -129,33 +115,45 @@ void bl31_early_platform_setup(bl31_params_t *from_bl2,
 
 	if (bl33_ep_info.pc == 0)
 		panic();
-
-#else /* LOAD_IMAGE_V2 */
-
-	/*
-	 * Check params passed from BL2 should not be NULL,
-	 */
-	assert(from_bl2 != NULL);
-	assert(from_bl2->h.type == PARAM_BL31);
-	assert(from_bl2->h.version >= VERSION_1);
-
-	/*
-	 * Copy BL3-2 and BL3-3 entry point information.
-	 * They are stored in Secure RAM, in BL2's address space.
-	 */
-	bl32_ep_info = *from_bl2->bl32_ep_info;
-	bl33_ep_info = *from_bl2->bl33_ep_info;
-#endif /* LOAD_IMAGE_V2 */
 }
 
 void bl31_plat_arch_setup(void)
 {
 	hikey960_init_mmu_el3(BL31_BASE,
 			BL31_LIMIT - BL31_BASE,
-			BL31_RO_BASE,
-			BL31_RO_LIMIT,
-			BL31_COHERENT_RAM_BASE,
-			BL31_COHERENT_RAM_LIMIT);
+			BL_CODE_BASE,
+			BL_CODE_END,
+			BL_COHERENT_RAM_BASE,
+			BL_COHERENT_RAM_END);
+}
+
+static void hikey960_edma_init(void)
+{
+	int i;
+	uint32_t non_secure;
+
+	non_secure = EDMAC_SEC_CTRL_INTR_SEC | EDMAC_SEC_CTRL_GLOBAL_SEC;
+	mmio_write_32(EDMAC_SEC_CTRL, non_secure);
+
+	/* Channel 0 is reserved for LPM3, keep secure */
+	for (i = 1; i < EDMAC_CHANNEL_NUMS; i++) {
+		mmio_write_32(EDMAC_AXI_CONF(i), (1 << 6) | (1 << 18));
+	}
+}
+
+static void hikey960_iomcu_dma_init(void)
+{
+	int i;
+	uint32_t non_secure;
+
+	non_secure = IOMCU_DMAC_SEC_CTRL_INTR_SEC | IOMCU_DMAC_SEC_CTRL_GLOBAL_SEC;
+	mmio_write_32(IOMCU_DMAC_SEC_CTRL, non_secure);
+
+	/* channels 0-3 are reserved */
+	for (i = 4; i < IOMCU_DMAC_CHANNEL_NUMS; i++) {
+		mmio_write_32(IOMCU_DMAC_AXI_CONF(i), IOMCU_DMAC_AXI_CONF_ARPROT_NS |
+				 IOMCU_DMAC_AXI_CONF_AWPROT_NS);
+	}
 }
 
 void bl31_platform_setup(void)
@@ -165,6 +163,9 @@ void bl31_platform_setup(void)
 	gicv2_distif_init();
 	gicv2_pcpu_distif_init();
 	gicv2_cpuif_enable();
+
+	hikey960_edma_init();
+	hikey960_iomcu_dma_init();
 
 	hisi_ipc_init();
 }

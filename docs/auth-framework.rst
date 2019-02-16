@@ -7,8 +7,9 @@ Abstracting a Chain of Trust
 
 .. contents::
 
-The aim of this document is to describe the authentication framework implemented
-in the Trusted Firmware. This framework fulfills the following requirements:
+The aim of this document is to describe the authentication framework
+implemented in Trusted Firmware-A (TF-A). This framework fulfills the
+following requirements:
 
 #. It should be possible for a platform port to specify the Chain of Trust in
    terms of certificate hierarchy and the mechanisms used to verify a
@@ -152,18 +153,18 @@ performed to verify it:
 In Diagram 1, each component is responsible for one or more of these operations.
 The responsibilities are briefly described below.
 
-TF Generic code and IO framework (GEN/IO)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TF-A Generic code and IO framework (GEN/IO)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 These components are responsible for initiating the authentication process for a
 particular image in BL1 or BL2. For each BL image that requires authentication,
 the Generic code asks recursively the Authentication module what is the parent
 image until either an authenticated image or the ROT is reached. Then the
-Generic code calls the IO framewotk to load the image and calls the
+Generic code calls the IO framework to load the image and calls the
 Authentication module to authenticate it, following the CoT from ROT to Image.
 
-TF Platform Port (PP)
-^^^^^^^^^^^^^^^^^^^^^
+TF-A Platform Port (PP)
+^^^^^^^^^^^^^^^^^^^^^^^
 
 The platform is responsible for:
 
@@ -208,7 +209,7 @@ It is responsible for:
 #. Tracking which images have been verified. In case an image is a part of
    multiple CoTs then it should be verified only once e.g. the Trusted World
    Key Certificate in the TBBR-Client spec. contains information to verify
-   SCP\_BL2, BL31, BL32 each of which have a separate CoT. (This
+   SCP_BL2, BL31, BL32 each of which have a separate CoT. (This
    responsibility has not been described in this document but should be
    trivial to implement).
 
@@ -374,8 +375,8 @@ single parsing method. There has to be one IPL for every method used by the
 platform.
 
 #. Raw format: This format is effectively a nop as an image using this method
-   is treated as being in raw binary format e.g. boot loader images used by ARM
-   TF. This method should only be used by data images.
+   is treated as being in raw binary format e.g. boot loader images used by
+   TF-A. This method should only be used by data images.
 
 #. X509V3 method: This method uses industry standards like X.509 to represent
    PKI certificates (authentication images). It is expected that open source
@@ -421,7 +422,7 @@ An IPL for each type must be registered using the following macro:
 -  ``_name``: a string containing the IPL name for debugging purposes.
 -  ``_init``: initialization function pointer.
 -  ``_check_int``: check image integrity function pointer.
--  ``_get_param``: extract authentication parameter funcion pointer.
+-  ``_get_param``: extract authentication parameter function pointer.
 
 The ``init()`` function will be used to initialize the IPL.
 
@@ -626,13 +627,13 @@ The TBBR CoT
 
 The CoT can be found in ``drivers/auth/tbbr/tbbr_cot.c``. This CoT consists of an
 array of image descriptors and it is registered in the framework using the macro
-``REGISTER_COT(cot_desc)``, where 'cot\_desc' must be the name of the array
+``REGISTER_COT(cot_desc)``, where 'cot_desc' must be the name of the array
 (passing a pointer or any other type of indirection will cause the registration
 process to fail).
 
 The number of images participating in the boot process depends on the CoT. There
-is, however, a minimum set of images that are mandatory in the Trusted Firmware
-and thus all CoTs must present:
+is, however, a minimum set of images that are mandatory in TF-A and thus all
+CoTs must present:
 
 -  ``BL2``
 -  ``SCP_BL2`` (platform specific)
@@ -648,7 +649,7 @@ Following the `Platform Porting Guide`_, a platform must provide unique
 identifiers for all the images and certificates that will be loaded during the
 boot process. If a platform is using the TBBR as a reference for trusted boot,
 these identifiers can be obtained from ``include/common/tbbr/tbbr_img_def.h``.
-ARM platforms include this file in ``include/plat/arm/common/arm_def.h``. Other
+Arm platforms include this file in ``include/plat/arm/common/arm_def.h``. Other
 platforms may also include this file or provide their own identifiers.
 
 **Important**: the authentication module uses these identifiers to index the
@@ -719,7 +720,7 @@ Example: the BL31 Chain of Trust
 
 Four image descriptors form the BL31 Chain of Trust:
 
-.. code:: asm
+.. code:: c
 
     [TRUSTED_KEY_CERT_ID] = {
         .img_id = TRUSTED_KEY_CERT_ID,
@@ -880,7 +881,7 @@ extract the authentication parameters. The number and type of parser libraries
 depend on the images used in the CoT. Raw images do not need a library, so
 only an x509v3 library is required for the TBBR CoT.
 
-ARM platforms will use an x509v3 library based on mbed TLS. This library may be
+Arm platforms will use an x509v3 library based on mbed TLS. This library may be
 found in ``drivers/auth/mbedtls/mbedtls_x509_parser.c``. It exports three
 functions:
 
@@ -898,14 +899,14 @@ an image of type ``IMG_CERT``, it will call the corresponding function exported
 in this file.
 
 The build system must be updated to include the corresponding library and
-mbed TLS sources. ARM platforms use the ``arm_common.mk`` file to pull the
+mbed TLS sources. Arm platforms use the ``arm_common.mk`` file to pull the
 sources.
 
 The cryptographic library
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The cryptographic module relies on a library to perform the required operations,
-i.e. verify a hash or a digital signature. ARM platforms will use a library
+i.e. verify a hash or a digital signature. Arm platforms will use a library
 based on mbed TLS, which can be found in
 ``drivers/auth/mbedtls/mbedtls_crypto.c``. This library is registered in the
 authentication framework using the macro ``REGISTER_CRYPTO_LIB()`` and exports
@@ -924,7 +925,7 @@ three functions:
 The mbedTLS library algorithm support is configured by the
 ``TF_MBEDTLS_KEY_ALG`` variable which can take in 3 values: `rsa`, `ecdsa` or
 `rsa+ecdsa`. This variable allows the Makefile to include the corresponding
-sources in the build for the various algorthms. Setting the variable to
+sources in the build for the various algorithms. Setting the variable to
 `rsa+ecdsa` enables support for both rsa and ecdsa algorithms in the mbedTLS
 library.
 
@@ -934,7 +935,7 @@ of SHA-256 with smaller memory footprint (~1.5 KB less) but slower (~30%).
 
 --------------
 
-*Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.*
+*Copyright (c) 2017-2018, Arm Limited and Contributors. All rights reserved.*
 
 .. _Trusted Board Boot: ./trusted-board-boot.rst
 .. _Platform Porting Guide: ./porting-guide.rst

@@ -1,15 +1,16 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __RUNTIME_SVC_H__
-#define __RUNTIME_SVC_H__
+#ifndef RUNTIME_SVC_H
+#define RUNTIME_SVC_H
 
-#include <bl_common.h>		/* to include exception types */
-#include <smcc_helpers.h>	/* to include SMCC definitions */
-
+#include <common/bl_common.h>		/* to include exception types */
+#include <lib/cassert.h>
+#include <lib/utils_def.h>
+#include <smccc_helpers.h>	/* to include SMCCC definitions */
 
 /*******************************************************************************
  * Structure definition, typedefs & constants for the runtime service framework
@@ -20,23 +21,23 @@
  * descriptor
  */
 #ifdef AARCH32
-#define RT_SVC_SIZE_LOG2	4
-#define RT_SVC_DESC_INIT	8
-#define RT_SVC_DESC_HANDLE	12
+#define RT_SVC_SIZE_LOG2	U(4)
+#define RT_SVC_DESC_INIT	U(8)
+#define RT_SVC_DESC_HANDLE	U(12)
 #else
-#define RT_SVC_SIZE_LOG2	5
-#define RT_SVC_DESC_INIT	16
-#define RT_SVC_DESC_HANDLE	24
+#define RT_SVC_SIZE_LOG2	U(5)
+#define RT_SVC_DESC_INIT	U(16)
+#define RT_SVC_DESC_HANDLE	U(24)
 #endif /* AARCH32 */
-#define SIZEOF_RT_SVC_DESC	(1 << RT_SVC_SIZE_LOG2)
+#define SIZEOF_RT_SVC_DESC	(U(1) << RT_SVC_SIZE_LOG2)
 
 
 /*
- * The function identifier has 6 bits for the owning entity number and
- * single bit for the type of smc call. When taken together these
- * values limit the maximum number of runtime services to 128.
+ * In SMCCC 1.X, the function identifier has 6 bits for the owning entity number
+ * and a single bit for the type of smc call. When taken together, those values
+ * limit the maximum number of runtime services to 128.
  */
-#define MAX_RT_SVCS		128
+#define MAX_RT_SVCS		U(128)
 
 #ifndef __ASSEMBLY__
 
@@ -67,17 +68,18 @@ typedef struct rt_svc_desc {
 } rt_svc_desc_t;
 
 /*
- * Convenience macro to declare a service descriptor
+ * Convenience macros to declare a service descriptor
  */
-#define DECLARE_RT_SVC(_name, _start, _end, _type, _setup, _smch) \
-	static const rt_svc_desc_t __svc_desc_ ## _name \
-		__section("rt_svc_descs") __used = { \
-			.start_oen = _start, \
-			.end_oen = _end, \
-			.call_type = _type, \
-			.name = #_name, \
-			.init = _setup, \
-			.handle = _smch }
+#define DECLARE_RT_SVC(_name, _start, _end, _type, _setup, _smch)	\
+	static const rt_svc_desc_t __svc_desc_ ## _name			\
+		__section("rt_svc_descs") __used = {			\
+			.start_oen = (_start),				\
+			.end_oen = (_end),				\
+			.call_type = (_type),				\
+			.name = #_name,					\
+			.init = (_setup),				\
+			.handle = (_smch)				\
+		}
 
 /*
  * Compile time assertions related to the 'rt_svc_desc' structure to:
@@ -97,24 +99,28 @@ CASSERT(RT_SVC_DESC_HANDLE == __builtin_offsetof(rt_svc_desc_t, handle), \
 
 
 /*
- * This macro combines the call type and the owning entity number corresponding
- * to a runtime service to generate a unique owning entity number. This unique
- * oen is used to access an entry in the 'rt_svc_descs_indices' array. The entry
- * contains the index of the service descriptor in the 'rt_svc_descs' array.
+ * This function combines the call type and the owning entity number
+ * corresponding to a runtime service to generate a unique owning entity number.
+ * This unique oen is used to access an entry in the 'rt_svc_descs_indices'
+ * array. The entry contains the index of the service descriptor in the
+ * 'rt_svc_descs' array.
  */
-#define get_unique_oen(oen, call_type)	((oen & FUNCID_OEN_MASK) |	\
-					((call_type & FUNCID_TYPE_MASK) \
-					 << FUNCID_OEN_WIDTH))
+static inline uint32_t get_unique_oen(uint32_t oen, uint32_t call_type)
+{
+	return ((call_type & FUNCID_TYPE_MASK) << FUNCID_OEN_WIDTH) |
+		(oen & FUNCID_OEN_MASK);
+}
 
 /*
- * This macro generates the unique owning entity number from the SMC Function
- * ID.  This unique oen is used to access an entry in the
- * 'rt_svc_descs_indices' array to invoke the corresponding runtime service
- * handler during SMC handling.
+ * This function generates the unique owning entity number from the SMC Function
+ * ID. This unique oen is used to access an entry in the 'rt_svc_descs_indices'
+ * array to invoke the corresponding runtime service handler during SMC
+ * handling.
  */
-#define get_unique_oen_from_smc_fid(fid)		\
-	get_unique_oen(((fid) >> FUNCID_OEN_SHIFT),	\
-			((fid) >> FUNCID_TYPE_SHIFT))
+static inline uint32_t get_unique_oen_from_smc_fid(uint32_t fid)
+{
+	return get_unique_oen(GET_SMC_OEN(fid), GET_SMC_TYPE(fid));
+}
 
 /*******************************************************************************
  * Function & variable prototypes
@@ -122,9 +128,11 @@ CASSERT(RT_SVC_DESC_HANDLE == __builtin_offsetof(rt_svc_desc_t, handle), \
 void runtime_svc_init(void);
 uintptr_t handle_runtime_svc(uint32_t smc_fid, void *cookie, void *handle,
 						unsigned int flags);
-extern uintptr_t __RT_SVC_DESCS_START__;
-extern uintptr_t __RT_SVC_DESCS_END__;
+IMPORT_SYM(uintptr_t, __RT_SVC_DESCS_START__,		RT_SVC_DESCS_START);
+IMPORT_SYM(uintptr_t, __RT_SVC_DESCS_END__,		RT_SVC_DESCS_END);
 void init_crash_reporting(void);
 
+extern uint8_t rt_svc_descs_indices[MAX_RT_SVCS];
+
 #endif /*__ASSEMBLY__*/
-#endif /* __RUNTIME_SVC_H__ */
+#endif /* RUNTIME_SVC_H */

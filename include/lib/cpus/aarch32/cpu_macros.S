@@ -3,11 +3,11 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __CPU_MACROS_S__
-#define __CPU_MACROS_S__
+#ifndef CPU_MACROS_S
+#define CPU_MACROS_S
 
 #include <arch.h>
-#include <errata_report.h>
+#include <lib/cpus/errata_report.h>
 
 #if defined(IMAGE_BL1) || defined(IMAGE_BL32)  || (defined(IMAGE_BL2) && BL2_AT_EL3)
 #define IMAGE_AT_EL3
@@ -35,38 +35,47 @@
 # define REPORT_ERRATA	0
 #endif
 
-	/*
-	 * Define the offsets to the fields in cpu_ops structure.
-	 */
-	.struct 0
-CPU_MIDR: /* cpu_ops midr */
-	.space  4
-/* Reset fn is needed during reset */
-#if defined(IMAGE_AT_EL3)
-CPU_RESET_FUNC: /* cpu_ops reset_func */
-	.space  4
+
+	.equ	CPU_MIDR_SIZE, CPU_WORD_SIZE
+	.equ	CPU_RESET_FUNC_SIZE, CPU_WORD_SIZE
+	.equ	CPU_PWR_DWN_OPS_SIZE, CPU_WORD_SIZE * CPU_MAX_PWR_DWN_OPS
+	.equ	CPU_ERRATA_FUNC_SIZE, CPU_WORD_SIZE
+	.equ	CPU_ERRATA_LOCK_SIZE, CPU_WORD_SIZE
+	.equ	CPU_ERRATA_PRINTED_SIZE, CPU_WORD_SIZE
+
+#ifndef IMAGE_AT_EL3
+	.equ	CPU_RESET_FUNC_SIZE, 0
 #endif
-#ifdef IMAGE_BL32 /* The power down core and cluster is needed only in BL32 */
-CPU_PWR_DWN_OPS: /* cpu_ops power down functions */
-	.space  (4 * CPU_MAX_PWR_DWN_OPS)
+
+/* The power down core and cluster is needed only in BL32 */
+#ifndef IMAGE_BL32
+	.equ	CPU_PWR_DWN_OPS_SIZE, 0
 #endif
+
+/* Fields required to print errata status  */
+#if !REPORT_ERRATA
+	.equ	CPU_ERRATA_FUNC_SIZE, 0
+#endif
+
+/* Only BL32 requires mutual exclusion and printed flag. */
+#if !(REPORT_ERRATA && defined(IMAGE_BL32))
+	.equ	CPU_ERRATA_LOCK_SIZE, 0
+	.equ	CPU_ERRATA_PRINTED_SIZE, 0
+#endif
+
 
 /*
- * Fields required to print errata status. Only in BL32 that the printing
- * require mutual exclusion and printed flag.
+ * Define the offsets to the fields in cpu_ops structure.
+ * Every offset is defined based on the offset and size of the previous
+ * field.
  */
-#if REPORT_ERRATA
-CPU_ERRATA_FUNC: /* CPU errata status printing function */
-	.space  4
-#if defined(IMAGE_BL32)
-CPU_ERRATA_LOCK:
-	.space	4
-CPU_ERRATA_PRINTED:
-	.space	4
-#endif
-#endif
-
-CPU_OPS_SIZE = .
+	.equ	CPU_MIDR, 0
+	.equ	CPU_RESET_FUNC, CPU_MIDR + CPU_MIDR_SIZE
+	.equ	CPU_PWR_DWN_OPS, CPU_RESET_FUNC + CPU_RESET_FUNC_SIZE
+	.equ	CPU_ERRATA_FUNC, CPU_PWR_DWN_OPS + CPU_PWR_DWN_OPS_SIZE
+	.equ	CPU_ERRATA_LOCK, CPU_ERRATA_FUNC + CPU_ERRATA_FUNC_SIZE
+	.equ	CPU_ERRATA_PRINTED, CPU_ERRATA_LOCK + CPU_ERRATA_LOCK_SIZE
+	.equ	CPU_OPS_SIZE, CPU_ERRATA_PRINTED + CPU_ERRATA_PRINTED_SIZE
 
 	/*
 	 * Write given expressions as words
@@ -128,21 +137,8 @@ CPU_OPS_SIZE = .
 	.word \_resetfunc
 #endif
 #ifdef IMAGE_BL32
-1:
 	/* Insert list of functions */
 	fill_constants CPU_MAX_PWR_DWN_OPS, \_power_down_ops
-2:
-	/*
-	 * Error if no or more than CPU_MAX_PWR_DWN_OPS were specified in the
-	 * list
-	 */
-	.ifeq 2b - 1b
-	  .error "At least one power down function must be specified"
-	.else
-	  .iflt 2b - 1b - (CPU_MAX_PWR_DWN_OPS * CPU_WORD_SIZE)
-	    .error "More than CPU_MAX_PWR_DWN_OPS functions specified"
-	  .endif
-	.endif
 #endif
 
 #if REPORT_ERRATA
@@ -165,10 +161,9 @@ CPU_OPS_SIZE = .
 	.endif
 
 	/*
-	 * Weakly-bound, optional errata status printing function for CPUs of
+	 * Mandatory errata status printing function for CPUs of
 	 * this class.
 	 */
-	.weak \_name\()_errata_report
 	.word \_name\()_errata_report
 
 #ifdef IMAGE_BL32
@@ -218,5 +213,18 @@ CPU_OPS_SIZE = .
 	bl	errata_print_msg
 	.endm
 #endif
+	/*
+	 * Helper macro that reads the part number of the current CPU and jumps
+	 * to the given label if it matches the CPU MIDR provided.
+	 *
+	 * Clobbers: r0-r1
+	 */
+	.macro  jump_if_cpu_midr _cpu_midr, _label
+	ldcopr	r0, MIDR
+	ubfx	r0, r0, #MIDR_PN_SHIFT, #12
+	ldr	r1, =((\_cpu_midr >> MIDR_PN_SHIFT) & MIDR_PN_MASK)
+	cmp	r0, r1
+	beq	\_label
+	.endm
 
-#endif /* __CPU_MACROS_S__ */
+#endif /* CPU_MACROS_S */

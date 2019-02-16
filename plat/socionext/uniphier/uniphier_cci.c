@@ -4,16 +4,17 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <cci.h>
 #include <stddef.h>
-#include <utils_def.h>
+
+#include <arch_helpers.h>
+#include <drivers/arm/cci.h>
+#include <lib/utils_def.h>
 
 #include "uniphier.h"
 
 #define UNIPHIER_CCI500_BASE	0x5FD00000
 
-static const int uniphier_cci_map[] = {0, 1};
+static const int uniphier_cci_map[] = {1, 0};
 
 static void __uniphier_cci_init(void)
 {

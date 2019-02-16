@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -7,9 +7,10 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
-#include <tbbr_oid.h>
 
-#include "fvp_def.h"
+#include <plat/common/platform.h>
+#include <platform_def.h>
+#include <tools_share/tbbr_oid.h>
 
 /*
  * Store a new non-volatile counter value. On some FVP versions, the

@@ -1,34 +1,27 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <bl_common.h>
-#include <css_def.h>
-#include <debug.h>
-#include <mmio.h>
-#include <plat_arm.h>
 #include <string.h>
-#include <utils.h>
-#include "../drivers/scp/css_scp.h"
+
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/arm/css/css_scp.h>
+#include <lib/mmio.h>
+#include <lib/utils.h>
+#include <plat/arm/common/plat_arm.h>
+#include <platform_def.h>
 
 /* Weak definition may be overridden in specific CSS based platform */
-#if LOAD_IMAGE_V2
 #pragma weak plat_arm_bl2_handle_scp_bl2
-#else
-#pragma weak bl2_plat_handle_scp_bl2
-#endif
 
 /*******************************************************************************
  * Transfer SCP_BL2 from Trusted RAM using the SCP Download protocol.
  * Return 0 on success, -1 otherwise.
  ******************************************************************************/
-#if LOAD_IMAGE_V2
 int plat_arm_bl2_handle_scp_bl2(image_info_t *scp_bl2_image_info)
-#else
-int bl2_plat_handle_scp_bl2(image_info_t *scp_bl2_image_info)
-#endif
 {
 	int ret;
 
@@ -60,9 +53,10 @@ int bl2_plat_handle_scp_bl2(image_info_t *scp_bl2_image_info)
 
 static unsigned int scp_boot_config;
 
-void bl2_early_platform_setup(meminfo_t *mem_layout)
+void bl2_early_platform_setup2(u_register_t arg0, u_register_t arg1,
+			u_register_t arg2, u_register_t arg3)
 {
-	arm_bl2_early_platform_setup(mem_layout);
+	arm_bl2_early_platform_setup((uintptr_t)arg0, (meminfo_t *)arg1);
 
 	/* Save SCP Boot config before it gets overwritten by SCP_BL2 loading */
 	scp_boot_config = mmio_read_32(SCP_BOOT_CFG_ADDR);

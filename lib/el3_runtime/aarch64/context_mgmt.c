@@ -1,25 +1,29 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <amu.h>
+#include <assert.h>
+#include <stdbool.h>
+#include <string.h>
+
+#include <platform_def.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <bl_common.h>
+#include <bl31/interrupt_mgmt.h>
+#include <common/bl_common.h>
 #include <context.h>
-#include <context_mgmt.h>
-#include <interrupt_mgmt.h>
-#include <platform.h>
-#include <platform_def.h>
-#include <pubsub_events.h>
-#include <smcc_helpers.h>
-#include <spe.h>
-#include <string.h>
-#include <sve.h>
-#include <utils.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <lib/el3_runtime/pubsub_events.h>
+#include <lib/extensions/amu.h>
+#include <lib/extensions/mpam.h>
+#include <lib/extensions/spe.h>
+#include <lib/extensions/sve.h>
+#include <lib/utils.h>
+#include <plat/common/platform.h>
+#include <smccc_helpers.h>
 
 
 /*******************************************************************************
@@ -35,7 +39,7 @@
  * which will used for programming an entry into a lower EL. The same context
  * will used to save state upon exception entry from that EL.
  ******************************************************************************/
-void cm_init(void)
+void __init cm_init(void)
 {
 	/*
 	 * The context management library has only global data to intialize, but
@@ -49,25 +53,24 @@ void cm_init(void)
  * entry_point_info structure.
  *
  * The security state to initialize is determined by the SECURE attribute
- * of the entry_point_info. The function returns a pointer to the initialized
- * context and sets this as the next context to return to.
+ * of the entry_point_info.
  *
- * The EE and ST attributes are used to configure the endianess and secure
+ * The EE and ST attributes are used to configure the endianness and secure
  * timer availability for the new execution context.
  *
  * To prepare the register state for entry call cm_prepare_el3_exit() and
  * el3_exit(). For Secure-EL1 cm_prepare_el3_exit() is equivalent to
  * cm_e1_sysreg_context_restore().
  ******************************************************************************/
-static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t *ep)
+void cm_setup_context(cpu_context_t *ctx, const entry_point_info_t *ep)
 {
 	unsigned int security_state;
 	uint32_t scr_el3, pmcr_el0;
 	el3_state_t *state;
 	gp_regs_t *gp_regs;
-	unsigned long sctlr_elx;
+	unsigned long sctlr_elx, actlr_elx;
 
-	assert(ctx);
+	assert(ctx != NULL);
 
 	security_state = GET_SECURITY_STATE(ep->h.attr);
 
@@ -83,7 +86,7 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 	 * the required value depending on the state of the SPSR_EL3 and the
 	 * Security state and entrypoint attributes of the next EL.
 	 */
-	scr_el3 = read_scr();
+	scr_el3 = (uint32_t)read_scr();
 	scr_el3 &= ~(SCR_NS_BIT | SCR_RW_BIT | SCR_FIQ_BIT | SCR_IRQ_BIT |
 			SCR_ST_BIT | SCR_HCE_BIT);
 	/*
@@ -102,10 +105,10 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 	 *  Secure timer registers to EL3, from AArch64 state only, if specified
 	 *  by the entrypoint attributes.
 	 */
-	if (EP_GET_ST(ep->h.attr))
+	if (EP_GET_ST(ep->h.attr) != 0U)
 		scr_el3 |= SCR_ST_BIT;
 
-#ifndef HANDLE_EA_EL3_FIRST
+#if !HANDLE_EA_EL3_FIRST
 	/*
 	 * SCR_EL3.EA: Do not route External Abort and SError Interrupt External
 	 *  to EL3 when executing at a lower EL. When executing at EL3, External
@@ -114,9 +117,14 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 	scr_el3 &= ~SCR_EA_BIT;
 #endif
 
+#if FAULT_INJECTION_SUPPORT
+	/* Enable fault injection from lower ELs */
+	scr_el3 |= SCR_FIEN_BIT;
+#endif
+
 #ifdef IMAGE_BL31
 	/*
-	 * SCR_EL3.IRQ, SCR_EL3.FIQ: Enable the physical FIQ and IRQ rounting as
+	 * SCR_EL3.IRQ, SCR_EL3.FIQ: Enable the physical FIQ and IRQ routing as
 	 *  indicated by the interrupt routing model for BL31.
 	 */
 	scr_el3 |= get_scr_el3_from_routing_model(security_state);
@@ -127,10 +135,9 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 	 * AArch64 and next EL is EL2, or if next execution state is AArch32 and
 	 * next mode is Hyp.
 	 */
-	if ((GET_RW(ep->spsr) == MODE_RW_64
-	     && GET_EL(ep->spsr) == MODE_EL2)
-	    || (GET_RW(ep->spsr) != MODE_RW_64
-		&& GET_M32(ep->spsr) == MODE32_hyp)) {
+	if (((GET_RW(ep->spsr) == MODE_RW_64) && (GET_EL(ep->spsr) == MODE_EL2))
+	    || ((GET_RW(ep->spsr) != MODE_RW_64)
+		&& (GET_M32(ep->spsr) == MODE32_hyp))) {
 		scr_el3 |= SCR_HCE_BIT;
 	}
 
@@ -145,7 +152,7 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 	 * SCTLR.M, SCTLR.C and SCTLR.I: These fields must be zero (as
 	 *  required by PSCI specification)
 	 */
-	sctlr_elx = EP_GET_EE(ep->h.attr) ? SCTLR_EE_BIT : 0;
+	sctlr_elx = (EP_GET_EE(ep->h.attr) != 0U) ? SCTLR_EE_BIT : 0U;
 	if (GET_RW(ep->spsr) == MODE_RW_64)
 		sctlr_elx |= SCTLR_EL1_RES1;
 	else {
@@ -168,10 +175,20 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
 
 	/*
 	 * Store the initialised SCTLR_EL1 value in the cpu_context - SCTLR_EL2
-	 * and other EL2 registers are set up by cm_preapre_ns_entry() as they
+	 * and other EL2 registers are set up by cm_prepare_ns_entry() as they
 	 * are not part of the stored cpu_context.
 	 */
 	write_ctx_reg(get_sysregs_ctx(ctx), CTX_SCTLR_EL1, sctlr_elx);
+
+	/*
+	 * Base the context ACTLR_EL1 on the current value, as it is
+	 * implementation defined. The context restore process will write
+	 * the value from the context to the actual register and can cause
+	 * problems for processor cores that don't expect certain bits to
+	 * be zero.
+	 */
+	actlr_elx = read_actlr_el1();
+	write_ctx_reg((get_sysregs_ctx(ctx)), (CTX_ACTLR_EL1), (actlr_elx));
 
 	if (security_state == SECURE) {
 		/*
@@ -216,7 +233,7 @@ static void cm_init_context_common(cpu_context_t *ctx, const entry_point_info_t 
  * When EL2 is implemented but unused `el2_unused` is non-zero, otherwise
  * it is zero.
  ******************************************************************************/
-static void enable_extensions_nonsecure(int el2_unused)
+static void enable_extensions_nonsecure(bool el2_unused)
 {
 #if IMAGE_BL31
 #if ENABLE_SPE_FOR_LOWER_ELS
@@ -229,6 +246,10 @@ static void enable_extensions_nonsecure(int el2_unused)
 
 #if ENABLE_SVE_FOR_NS
 	sve_enable(el2_unused);
+#endif
+
+#if ENABLE_MPAM_FOR_LOWER_ELS
+	mpam_enable(el2_unused);
 #endif
 #endif
 }
@@ -243,7 +264,7 @@ void cm_init_context_by_index(unsigned int cpu_idx,
 {
 	cpu_context_t *ctx;
 	ctx = cm_get_context_by_index(cpu_idx, GET_SECURITY_STATE(ep->h.attr));
-	cm_init_context_common(ctx, ep);
+	cm_setup_context(ctx, ep);
 }
 
 /*******************************************************************************
@@ -255,7 +276,7 @@ void cm_init_my_context(const entry_point_info_t *ep)
 {
 	cpu_context_t *ctx;
 	ctx = cm_get_context(GET_SECURITY_STATE(ep->h.attr));
-	cm_init_context_common(ctx, ep);
+	cm_setup_context(ctx, ep);
 }
 
 /*******************************************************************************
@@ -270,33 +291,42 @@ void cm_prepare_el3_exit(uint32_t security_state)
 {
 	uint32_t sctlr_elx, scr_el3, mdcr_el2;
 	cpu_context_t *ctx = cm_get_context(security_state);
-	int el2_unused = 0;
+	bool el2_unused = false;
+	uint64_t hcr_el2 = 0U;
 
-	assert(ctx);
+	assert(ctx != NULL);
 
 	if (security_state == NON_SECURE) {
-		scr_el3 = read_ctx_reg(get_el3state_ctx(ctx), CTX_SCR_EL3);
-		if (scr_el3 & SCR_HCE_BIT) {
+		scr_el3 = (uint32_t)read_ctx_reg(get_el3state_ctx(ctx),
+						 CTX_SCR_EL3);
+		if ((scr_el3 & SCR_HCE_BIT) != 0U) {
 			/* Use SCTLR_EL1.EE value to initialise sctlr_el2 */
-			sctlr_elx = read_ctx_reg(get_sysregs_ctx(ctx),
-						 CTX_SCTLR_EL1);
+			sctlr_elx = (uint32_t)read_ctx_reg(get_sysregs_ctx(ctx),
+							   CTX_SCTLR_EL1);
 			sctlr_elx &= SCTLR_EE_BIT;
 			sctlr_elx |= SCTLR_EL2_RES1;
 			write_sctlr_el2(sctlr_elx);
-		} else if (EL_IMPLEMENTED(2)) {
-			el2_unused = 1;
+		} else if (el_implemented(2) != EL_IMPL_NONE) {
+			el2_unused = true;
 
 			/*
 			 * EL2 present but unused, need to disable safely.
 			 * SCTLR_EL2 can be ignored in this case.
 			 *
-			 * Initialise all fields in HCR_EL2, except HCR_EL2.RW,
-			 * to zero so that Non-secure operations do not trap to
-			 * EL2.
-			 *
-			 * HCR_EL2.RW: Set this field to match SCR_EL3.RW
+			 * Set EL2 register width appropriately: Set HCR_EL2
+			 * field to match SCR_EL3.RW.
 			 */
-			write_hcr_el2((scr_el3 & SCR_RW_BIT) ? HCR_RW_BIT : 0);
+			if ((scr_el3 & SCR_RW_BIT) != 0U)
+				hcr_el2 |= HCR_RW_BIT;
+
+			/*
+			 * For Armv8.3 pointer authentication feature, disable
+			 * traps to EL2 when accessing key registers or using
+			 * pointer authentication instructions from lower ELs.
+			 */
+			hcr_el2 |= (HCR_API_BIT | HCR_APK_BIT);
+
+			write_hcr_el2(hcr_el2);
 
 			/*
 			 * Initialise CPTR_EL2 setting all fields rather than
@@ -320,7 +350,7 @@ void cm_prepare_el3_exit(uint32_t security_state)
 					| CPTR_EL2_TFP_BIT));
 
 			/*
-			 * Initiliase CNTHCTL_EL2. All fields are
+			 * Initialise CNTHCTL_EL2. All fields are
 			 * architecturally UNKNOWN on reset and are set to zero
 			 * except for field(s) listed below.
 			 *
@@ -442,7 +472,7 @@ void cm_el1_sysregs_context_save(uint32_t security_state)
 	cpu_context_t *ctx;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	el1_sysregs_context_save(get_sysregs_ctx(ctx));
 
@@ -459,7 +489,7 @@ void cm_el1_sysregs_context_restore(uint32_t security_state)
 	cpu_context_t *ctx;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	el1_sysregs_context_restore(get_sysregs_ctx(ctx));
 
@@ -481,7 +511,7 @@ void cm_set_elr_el3(uint32_t security_state, uintptr_t entrypoint)
 	el3_state_t *state;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	/* Populate EL3 state so that ERET jumps to the correct entry */
 	state = get_el3state_ctx(ctx);
@@ -499,7 +529,7 @@ void cm_set_elr_spsr_el3(uint32_t security_state,
 	el3_state_t *state;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	/* Populate EL3 state so that ERET jumps to the correct entry */
 	state = get_el3state_ctx(ctx);
@@ -521,21 +551,21 @@ void cm_write_scr_el3_bit(uint32_t security_state,
 	uint32_t scr_el3;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	/* Ensure that the bit position is a valid one */
-	assert((1 << bit_pos) & SCR_VALID_BIT_MASK);
+	assert(((1U << bit_pos) & SCR_VALID_BIT_MASK) != 0U);
 
 	/* Ensure that the 'value' is only a bit wide */
-	assert(value <= 1);
+	assert(value <= 1U);
 
 	/*
 	 * Get the SCR_EL3 value from the cpu context, clear the desired bit
 	 * and set it to its new value.
 	 */
 	state = get_el3state_ctx(ctx);
-	scr_el3 = read_ctx_reg(state, CTX_SCR_EL3);
-	scr_el3 &= ~(1 << bit_pos);
+	scr_el3 = (uint32_t)read_ctx_reg(state, CTX_SCR_EL3);
+	scr_el3 &= ~(1U << bit_pos);
 	scr_el3 |= value << bit_pos;
 	write_ctx_reg(state, CTX_SCR_EL3, scr_el3);
 }
@@ -550,11 +580,11 @@ uint32_t cm_get_scr_el3(uint32_t security_state)
 	el3_state_t *state;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	/* Populate EL3 state so that ERET jumps to the correct entry */
 	state = get_el3state_ctx(ctx);
-	return read_ctx_reg(state, CTX_SCR_EL3);
+	return (uint32_t)read_ctx_reg(state, CTX_SCR_EL3);
 }
 
 /*******************************************************************************
@@ -567,7 +597,7 @@ void cm_set_next_eret_context(uint32_t security_state)
 	cpu_context_t *ctx;
 
 	ctx = cm_get_context(security_state);
-	assert(ctx);
+	assert(ctx != NULL);
 
 	cm_set_next_context(ctx);
 }

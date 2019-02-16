@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PUBSUB_H__
-#define __PUBSUB_H__
+#ifndef PUBSUB_H
+#define PUBSUB_H
 
 #define __pubsub_start_sym(event)	__pubsub_##event##_start
 #define __pubsub_end_sym(event)		__pubsub_##event##_end
@@ -30,10 +30,11 @@
 
 /* For the compiler ... */
 
-#include <arch_helpers.h>
 #include <assert.h>
 #include <cdefs.h>
 #include <stddef.h>
+
+#include <arch_helpers.h>
 
 #define __pubsub_section(event)		__section("__pubsub_" #event)
 
@@ -49,9 +50,12 @@
  * Have the function func called back when the specified event happens. This
  * macro places the function address into the pubsub section, which is picked up
  * and invoked by the invoke_pubsubs() function via. the PUBLISH_EVENT* macros.
+ *
+ * The extern declaration is there to satisfy MISRA C-2012 rule 8.4.
  */
 #define SUBSCRIBE_TO_EVENT(event, func) \
-	pubsub_cb_t __cb_func_##func##event __pubsub_section(event) = func
+	extern pubsub_cb_t __cb_func_##func##event __pubsub_section(event); \
+	pubsub_cb_t __cb_func_##func##event __pubsub_section(event) = (func)
 
 /*
  * Iterate over subscribed handlers for a defined event. 'event' is the name of
@@ -81,4 +85,4 @@
 typedef void* (*pubsub_cb_t)(const void *arg);
 
 #endif	/* __LINKER__ */
-#endif	/* __PUBSUB_H__ */
+#endif /* PUBSUB_H */

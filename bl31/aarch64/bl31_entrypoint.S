@@ -1,15 +1,17 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <platform_def.h>
+
 #include <arch.h>
-#include <bl_common.h>
+#include <common/bl_common.h>
 #include <el3_common_macros.S>
-#include <pmf_asm_macros.S>
-#include <runtime_instr.h>
-#include <xlat_tables_defs.h>
+#include <lib/pmf/pmf_asm_macros.S>
+#include <lib/runtime_instr.h>
+#include <lib/xlat_tables/xlat_mmu_helpers.h>
 
 	.globl	bl31_entrypoint
 	.globl	bl31_warm_entrypoint
@@ -23,13 +25,13 @@
 func bl31_entrypoint
 #if !RESET_TO_BL31
 	/* ---------------------------------------------------------------
-	 * Preceding bootloader has populated x0 with a pointer to a
-	 * 'bl31_params' structure & x1 with a pointer to platform
-	 * specific structure
+	 * Stash the previous bootloader arguments x0 - x3 for later use.
 	 * ---------------------------------------------------------------
 	 */
 	mov	x20, x0
 	mov	x21, x1
+	mov	x22, x2
+	mov	x23, x3
 
 	/* ---------------------------------------------------------------------
 	 * For !RESET_TO_BL31 systems, only the primary CPU ever reaches
@@ -47,13 +49,6 @@ func bl31_entrypoint
 		_init_memory=0					\
 		_init_c_runtime=1				\
 		_exception_vectors=runtime_exceptions
-
-	/* ---------------------------------------------------------------------
-	 * Relay the previous bootloader's arguments to the platform layer
-	 * ---------------------------------------------------------------------
-	 */
-	mov	x0, x20
-	mov	x1, x21
 #else
 	/* ---------------------------------------------------------------------
 	 * For RESET_TO_BL31 systems which have a programmable reset address,
@@ -75,15 +70,32 @@ func bl31_entrypoint
 	 * arguments passed to the platform layer to reflect that.
 	 * ---------------------------------------------------------------------
 	 */
-	mov	x0, 0
-	mov	x1, 0
+	mov	x20, 0
+	mov	x21, 0
+	mov	x22, 0
+	mov	x23, 0
 #endif /* RESET_TO_BL31 */
+
+	/* --------------------------------------------------------------------
+	 * If PIE is enabled, fixup the Global descriptor Table and dynamic
+	 * relocations
+	 * --------------------------------------------------------------------
+	 */
+#if ENABLE_PIE
+	mov_imm	x0, BL31_BASE
+	mov_imm	x1, BL31_LIMIT
+	bl	fixup_gdt_reloc
+#endif /* ENABLE_PIE */
 
 	/* ---------------------------------------------
 	 * Perform platform specific early arch. setup
 	 * ---------------------------------------------
 	 */
-	bl	bl31_early_platform_setup
+	mov	x0, x20
+	mov	x1, x21
+	mov	x2, x22
+	mov	x3, x23
+	bl	bl31_early_platform_setup2
 	bl	bl31_plat_arch_setup
 
 	/* ---------------------------------------------
@@ -126,7 +138,7 @@ func bl31_warm_entrypoint
 	 * timestamp collection will need to do cache maintenance prior
 	 * to timestamp update.
 	 */
-	pmf_calc_timestamp_addr rt_instr_svc RT_INSTR_EXIT_HW_LOW_PWR
+	pmf_calc_timestamp_addr rt_instr_svc, RT_INSTR_EXIT_HW_LOW_PWR
 	mrs	x1, cntpct_el0
 	str	x1, [x0]
 #endif
@@ -172,20 +184,17 @@ func bl31_warm_entrypoint
 	 * enter coherency (as CPUs already are); and there's no reason to have
 	 * caches disabled either.
 	 */
-	mov	x0, #DISABLE_DCACHE
-	bl	bl31_plat_enable_mmu
-
 #if HW_ASSISTED_COHERENCY || WARMBOOT_ENABLE_DCACHE_EARLY
-	mrs	x0, sctlr_el3
-	orr	x0, x0, #SCTLR_C_BIT
-	msr	sctlr_el3, x0
-	isb
+	mov	x0, xzr
+#else
+	mov	x0, #DISABLE_DCACHE
 #endif
+	bl	bl31_plat_enable_mmu
 
 	bl	psci_warmboot_entrypoint
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
-	pmf_calc_timestamp_addr rt_instr_svc RT_INSTR_EXIT_PSCI
+	pmf_calc_timestamp_addr rt_instr_svc, RT_INSTR_EXIT_PSCI
 	mov	x19, x0
 
 	/*

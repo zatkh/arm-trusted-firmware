@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <lib/xlat_tables/xlat_tables_defs.h>
 #include <platform_def.h>
-#include <xlat_tables_defs.h>
 
 OUTPUT_FORMAT(PLATFORM_LINKER_FORMAT)
 OUTPUT_ARCH(PLATFORM_LINKER_ARCH)
@@ -59,7 +59,7 @@ SECTIONS
          * executable.  No RW data from the next section must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __RO_END__ = .;
     } >RAM
 
@@ -113,9 +113,11 @@ SECTIONS
          */
         . = ALIGN(CACHE_WRITEBACK_GRANULE);
         __BAKERY_LOCK_START__ = .;
+        __PERCPU_BAKERY_LOCK_START__ = .;
         *(bakery_lock)
         . = ALIGN(CACHE_WRITEBACK_GRANULE);
-        __PERCPU_BAKERY_LOCK_SIZE__ = ABSOLUTE(. - __BAKERY_LOCK_START__);
+        __PERCPU_BAKERY_LOCK_END__ = .;
+        __PERCPU_BAKERY_LOCK_SIZE__ = ABSOLUTE(__PERCPU_BAKERY_LOCK_END__ - __PERCPU_BAKERY_LOCK_START__);
         . = . + (__PERCPU_BAKERY_LOCK_SIZE__ * (PLATFORM_CORE_COUNT - 1));
         __BAKERY_LOCK_END__ = .;
 #ifdef PLAT_PERCPU_BAKERY_LOCK_SIZE
@@ -132,7 +134,8 @@ SECTIONS
     /*
      * The xlat_table section is for full, aligned page tables (4K).
      * Removing them from .bss avoids forcing 4K alignment on
-     * the .bss section and eliminates the unecessary zero init
+     * the .bss section. The tables are initialized to zero by the translation
+     * tables library.
      */
     xlat_table (NOLOAD) : {
         *(xlat_table)
@@ -160,7 +163,7 @@ SECTIONS
          * as device memory.  No other unexpected data must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __COHERENT_RAM_END__ = .;
     } >RAM2
 #endif

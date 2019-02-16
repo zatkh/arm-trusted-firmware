@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __MCE_PRIVATE_H__
-#define __MCE_PRIVATE_H__
+#ifndef MCE_PRIVATE_H
+#define MCE_PRIVATE_H
 
-#include <mmio.h>
+#include <lib/mmio.h>
+
 #include <tegra_def.h>
 
 /*******************************************************************************
@@ -63,19 +64,17 @@
 #define MCA_ARG_FINISH_MASK			U(0xFF)
 
 /*******************************************************************************
- * Uncore PERFMON ARI struct
+ * Uncore PERFMON ARI macros
  ******************************************************************************/
 #define UNCORE_PERFMON_CMD_READ			U(0)
 #define UNCORE_PERFMON_CMD_WRITE		U(1)
 
 #define UNCORE_PERFMON_CMD_MASK			U(0xFF)
-#define UNCORE_PERFMON_CMD_SHIFT		U(24)
 #define UNCORE_PERFMON_UNIT_GRP_MASK		U(0xF)
 #define UNCORE_PERFMON_SELECTOR_MASK		U(0xF)
 #define UNCORE_PERFMON_REG_MASK			U(0xFF)
 #define UNCORE_PERFMON_CTR_MASK			U(0xFF)
 #define UNCORE_PERFMON_RESP_STATUS_MASK		U(0xFF)
-#define UNCORE_PERFMON_RESP_STATUS_SHIFT	U(24)
 
 /*******************************************************************************
  * Structure populated by arch specific code to export routines which perform
@@ -258,4 +257,4 @@ int32_t nvg_cc3_ctrl(uint32_t ari_base, uint32_t freq, uint32_t volt, uint8_t en
 extern void nvg_set_request_data(uint64_t req, uint64_t data);
 extern void nvg_set_request(uint64_t req);
 extern uint64_t nvg_get_result(void);
-#endif /* __MCE_PRIVATE_H__ */
+#endif /* MCE_PRIVATE_H */

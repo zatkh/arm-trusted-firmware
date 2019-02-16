@@ -1,10 +1,10 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __MBEDTLS_CONFIG_H__
-#define __MBEDTLS_CONFIG_H__
+#ifndef MBEDTLS_CONFIG_H
+#define MBEDTLS_CONFIG_H
 
 /*
  * Key algorithms currently supported on mbed TLS libraries
@@ -30,9 +30,6 @@
 /* Prevent mbed TLS from using snprintf so that it can use tf_snprintf. */
 #define MBEDTLS_PLATFORM_SNPRINTF_ALT
 
-#if !ERROR_DEPRECATED
-#define MBEDTLS_PKCS1_V15
-#endif
 #define MBEDTLS_PKCS1_V21
 
 #define MBEDTLS_X509_ALLOW_UNSUPPORTED_CRITICAL_EXTENSION
@@ -95,4 +92,16 @@
 #include "mbedtls/check_config.h"
 #endif
 
-#endif /* __MBEDTLS_CONFIG_H__ */
+/*
+ * Determine Mbed TLS heap size
+ * 13312 = 13*1024
+ * 7168 = 7*1024
+ */
+#if (TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_ECDSA) \
+	|| (TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_RSA_AND_ECDSA)
+#define TF_MBEDTLS_HEAP_SIZE		U(13312)
+#elif (TF_MBEDTLS_KEY_ALG_ID == TF_MBEDTLS_RSA)
+#define TF_MBEDTLS_HEAP_SIZE		U(7168)
+#endif
+
+#endif /* MBEDTLS_CONFIG_H */

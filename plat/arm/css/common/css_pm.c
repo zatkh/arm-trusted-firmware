@@ -1,19 +1,21 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <cassert.h>
-#include <css_pm.h>
-#include <debug.h>
 #include <errno.h>
-#include <plat_arm.h>
-#include <platform.h>
+
 #include <platform_def.h>
-#include "../drivers/scp/css_scp.h"
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/arm/css/css_scp.h>
+#include <lib/cassert.h>
+#include <plat/arm/common/plat_arm.h>
+#include <plat/arm/css/common/css_pm.h>
+#include <plat/common/platform.h>
 
 /* Allow CSS platforms to override `plat_arm_psci_pm_ops` */
 #pragma weak plat_arm_psci_pm_ops
@@ -96,7 +98,7 @@ static void css_pwr_domain_on_finisher_common(
 void css_pwr_domain_on_finish(const psci_power_state_t *target_state)
 {
 	/* Assert that the system power domain need not be initialized */
-	assert(CSS_SYSTEM_PWR_STATE(target_state) == ARM_LOCAL_STATE_RUN);
+	assert(css_system_pwr_state(target_state) == ARM_LOCAL_STATE_RUN);
 
 	/* Program the gic per-cpu distributor or re-distributor interface */
 	plat_arm_gic_pcpu_init();
@@ -149,7 +151,7 @@ void css_pwr_domain_suspend(const psci_power_state_t *target_state)
 	css_power_down_common(target_state);
 
 	/* Perform system domain state saving if issuing system suspend */
-	if (CSS_SYSTEM_PWR_STATE(target_state) == ARM_LOCAL_STATE_OFF) {
+	if (css_system_pwr_state(target_state) == ARM_LOCAL_STATE_OFF) {
 		arm_system_pwr_domain_save();
 
 		/* Power off the Redistributor after having saved its context */
@@ -174,7 +176,7 @@ void css_pwr_domain_suspend_finish(
 		return;
 
 	/* Perform system domain restore if woken up from system suspend */
-	if (CSS_SYSTEM_PWR_STATE(target_state) == ARM_LOCAL_STATE_OFF)
+	if (css_system_pwr_state(target_state) == ARM_LOCAL_STATE_OFF)
 		/*
 		 * At this point, the Distributor must be powered on to be ready
 		 * to have its state restored. The Redistributor will be powered
@@ -264,11 +266,23 @@ static int css_validate_power_state(unsigned int power_state,
 	rc = arm_validate_power_state(power_state, req_state);
 
 	/*
+	 * Ensure that we don't overrun the pwr_domain_state array in the case
+	 * where the platform supported max power level is less than the system
+	 * power level
+	 */
+
+#if (PLAT_MAX_PWR_LVL == CSS_SYSTEM_PWR_DMN_LVL)
+
+	/*
 	 * Ensure that the system power domain level is never suspended
 	 * via PSCI CPU SUSPEND API. Currently system suspend is only
 	 * supported via PSCI SYSTEM SUSPEND API.
 	 */
-	req_state->pwr_domain_state[CSS_SYSTEM_PWR_DMN_LVL] = ARM_LOCAL_STATE_RUN;
+
+	req_state->pwr_domain_state[CSS_SYSTEM_PWR_DMN_LVL] =
+							ARM_LOCAL_STATE_RUN;
+#endif
+
 	return rc;
 }
 
@@ -303,11 +317,8 @@ plat_psci_ops_t plat_arm_psci_pm_ops = {
 	.translate_power_state_by_mpidr = css_translate_power_state_by_mpidr,
 	.get_node_hw_state	= css_node_hw_state,
 	.get_sys_suspend_power_state = css_get_sys_suspend_power_state,
-/*
- * mem_protect is not supported in RESET_TO_BL31 and RESET_TO_SP_MIN,
- * as that would require mapping in all of NS DRAM into BL31 or BL32.
- */
-#if defined(PLAT_ARM_MEM_PROT_ADDR) && !RESET_TO_BL31 && !RESET_TO_SP_MIN
+
+#if defined(PLAT_ARM_MEM_PROT_ADDR)
 	.mem_protect_chk	= arm_psci_mem_protect_chk,
 	.read_mem_protect	= arm_psci_read_mem_protect,
 	.write_mem_protect	= arm_nor_psci_write_mem_protect,

@@ -1,15 +1,16 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLATFORM_DEF_H__
-#define __PLATFORM_DEF_H__
+#ifndef PLATFORM_DEF_H
+#define PLATFORM_DEF_H
 
 #include <arch.h>
-#include <common_def.h>
-#include <tbbr_img_def.h>
+#include <common/tbbr/tbbr_img_def.h>
+#include <lib/utils_def.h>
+#include <plat/common/common_def.h>
 
 /* Special value used to verify platform parameters from BL2 to BL3-1 */
 #define QEMU_BL31_PLAT_PARAM_VAL	0x0f1e2d3c4b5a6978ULL
@@ -36,13 +37,13 @@
 					PLATFORM_CORE_COUNT)
 #define PLAT_MAX_PWR_LVL		MPIDR_AFFLVL1
 
-#define PLAT_MAX_RET_STATE		1
-#define PLAT_MAX_OFF_STATE		2
+#define PLAT_MAX_RET_STATE		U(1)
+#define PLAT_MAX_OFF_STATE		U(2)
 
 /* Local power state for power domains in Run state. */
-#define PLAT_LOCAL_STATE_RUN		0
+#define PLAT_LOCAL_STATE_RUN		U(0)
 /* Local power state for retention. Valid only for CPU power domains */
-#define PLAT_LOCAL_STATE_RET		1
+#define PLAT_LOCAL_STATE_RET		U(1)
 /*
  * Local power state for OFF/power-down. Valid for CPU and cluster power
  * domains.
@@ -75,7 +76,7 @@
 #define NS_DRAM0_SIZE			0x3de00000
 
 #define SEC_SRAM_BASE			0x0e000000
-#define SEC_SRAM_SIZE			0x00040000
+#define SEC_SRAM_SIZE			0x00060000
 
 #define SEC_DRAM_BASE			0x0e100000
 #define SEC_DRAM_SIZE			0x00f00000
@@ -123,7 +124,7 @@
  * Put BL2 just below BL3-1. BL2_BASE is calculated using the current BL2 debug
  * size plus a little space for growth.
  */
-#define BL2_BASE			(BL31_BASE - 0x1D000)
+#define BL2_BASE			(BL31_BASE - 0x25000)
 #define BL2_LIMIT			BL31_BASE
 
 /*
@@ -166,9 +167,9 @@
 
 #define NS_IMAGE_OFFSET			0x60000000
 
-#define PLAT_PHY_ADDR_SPACE_SIZE	(1ull << 32)
-#define PLAT_VIRT_ADDR_SPACE_SIZE	(1ull << 32)
-#define MAX_MMAP_REGIONS		8
+#define PLAT_PHY_ADDR_SPACE_SIZE	(1ULL << 32)
+#define PLAT_VIRT_ADDR_SPACE_SIZE	(1ULL << 32)
+#define MAX_MMAP_REGIONS		10
 #define MAX_XLAT_TABLES			6
 #define MAX_IO_DEVICES			3
 #define MAX_IO_HANDLES			4
@@ -198,7 +199,7 @@
 #define DEVICE0_BASE			0x08000000
 #define DEVICE0_SIZE			0x00021000
 #define DEVICE1_BASE			0x09000000
-#define DEVICE1_SIZE			0x00011000
+#define DEVICE1_SIZE			0x00041000
 
 /*
  * GIC related constants
@@ -222,11 +223,11 @@
  * DT related constants
  */
 #define PLAT_QEMU_DT_BASE		NS_DRAM0_BASE
-#define PLAT_QEMU_DT_MAX_SIZE		0x10000
+#define PLAT_QEMU_DT_MAX_SIZE		0x100000
 
 /*
  * System counter
  */
 #define SYS_COUNTER_FREQ_IN_TICKS	((1000 * 1000 * 1000) / 16)
 
-#endif /* __PLATFORM_DEF_H__ */
+#endif /* PLATFORM_DEF_H */

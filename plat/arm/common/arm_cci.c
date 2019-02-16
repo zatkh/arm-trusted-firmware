@@ -1,14 +1,15 @@
 /*
- * Copyright (c) 2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2016-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch.h>
-#include <cci.h>
-#include <plat_arm.h>
 #include <platform_def.h>
-#include <utils.h>
+
+#include <arch.h>
+#include <drivers/arm/cci.h>
+#include <lib/utils.h>
+#include <plat/arm/common/plat_arm.h>
 
 static const int cci_map[] = {
 	PLAT_ARM_CCI_CLUSTER0_SL_IFACE_IX,
@@ -27,7 +28,7 @@ static const int cci_map[] = {
 /******************************************************************************
  * Helper function to initialize ARM CCI driver.
  *****************************************************************************/
-void plat_arm_interconnect_init(void)
+void __init plat_arm_interconnect_init(void)
 {
 	cci_init(PLAT_ARM_CCI_BASE, cci_map, ARRAY_SIZE(cci_map));
 }

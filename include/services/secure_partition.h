@@ -1,27 +1,17 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __SECURE_PARTITION_H__
-#define __SECURE_PARTITION_H__
+#ifndef SECURE_PARTITION_H
+#define SECURE_PARTITION_H
 
-#include <bl_common.h>
-#include <types.h>
-#include <utils_def.h>
+#if SPM_MM
 
-/* Linker symbols */
-extern uintptr_t __SP_IMAGE_XLAT_TABLES_START__;
-extern uintptr_t __SP_IMAGE_XLAT_TABLES_END__;
+#include <stdint.h>
 
-/* Definitions */
-#define SP_IMAGE_XLAT_TABLES_START	\
-	(uintptr_t)(&__SP_IMAGE_XLAT_TABLES_START__)
-#define SP_IMAGE_XLAT_TABLES_END	\
-	(uintptr_t)(&__SP_IMAGE_XLAT_TABLES_END__)
-#define SP_IMAGE_XLAT_TABLES_SIZE	\
-	(SP_IMAGE_XLAT_TABLES_END - SP_IMAGE_XLAT_TABLES_START)
+#include <lib/utils_def.h>
 
 /*
  * Flags used by the secure_partition_mp_info structure to describe the
@@ -59,8 +49,6 @@ typedef struct secure_partition_boot_info {
 	secure_partition_mp_info_t	*mp_info;
 } secure_partition_boot_info_t;
 
-/* Setup function for secure partitions context. */
+#endif /* SPM_MM */
 
-void secure_partition_setup(void);
-
-#endif /* __SECURE_PARTITION_H__ */
+#endif /* SECURE_PARTITION_H */

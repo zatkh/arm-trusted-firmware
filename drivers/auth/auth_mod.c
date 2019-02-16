@@ -1,20 +1,22 @@
 /*
- * Copyright (c) 2015-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <auth_common.h>
-#include <auth_mod.h>
-#include <cot_def.h>
-#include <crypto_mod.h>
-#include <debug.h>
-#include <img_parser_mod.h>
-#include <platform.h>
-#include <platform_def.h>
 #include <stdint.h>
 #include <string.h>
+
+#include <platform_def.h>
+
+#include <common/debug.h>
+#include <common/tbbr/cot_def.h>
+#include <drivers/auth/auth_common.h>
+#include <drivers/auth/auth_mod.h>
+#include <drivers/auth/crypto_mod.h>
+#include <drivers/auth/img_parser_mod.h>
+#include <plat/common/platform.h>
 
 /* ASN.1 tags */
 #define ASN1_INTEGER                 0x02
@@ -30,7 +32,7 @@
 
 /* Pointer to CoT */
 extern const auth_img_desc_t *const cot_desc_ptr;
-extern unsigned int auth_img_flags[];
+extern unsigned int auth_img_flags[MAX_NUMBER_IDS];
 
 static int cmp_auth_param_type_desc(const auth_param_type_desc_t *a,
 		const auth_param_type_desc_t *b)

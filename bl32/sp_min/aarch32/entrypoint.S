@@ -6,13 +6,13 @@
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl_common.h>
+#include <common/bl_common.h>
+#include <common/runtime_svc.h>
 #include <context.h>
 #include <el3_common_macros.S>
-#include <runtime_svc.h>
-#include <smcc_helpers.h>
-#include <smcc_macros.S>
-#include <xlat_tables_defs.h>
+#include <lib/xlat_tables/xlat_tables_defs.h>
+#include <smccc_helpers.h>
+#include <smccc_macros.S>
 
 	.globl	sp_min_vector_table
 	.globl	sp_min_entrypoint
@@ -64,8 +64,10 @@ func sp_min_entrypoint
 	 * specific structure
 	 * ---------------------------------------------------------------
 	 */
-	mov	r11, r0
-	mov	r12, r1
+	mov	r9, r0
+	mov	r10, r1
+	mov	r11, r2
+	mov	r12, r3
 
 	/* ---------------------------------------------------------------------
 	 * For !RESET_TO_SP_MIN systems, only the primary CPU ever reaches
@@ -88,8 +90,6 @@ func sp_min_entrypoint
 	 * Relay the previous bootloader's arguments to the platform layer
 	 * ---------------------------------------------------------------------
 	 */
-	mov	r0, r11
-	mov	r1, r12
 #else
 	/* ---------------------------------------------------------------------
 	 * For RESET_TO_SP_MIN systems which have a programmable reset address,
@@ -111,15 +111,22 @@ func sp_min_entrypoint
 	 * Zero the arguments passed to the platform layer to reflect that.
 	 * ---------------------------------------------------------------------
 	 */
-	mov	r0, #0
-	mov	r1, #0
+	mov	r9, #0
+	mov	r10, #0
+	mov	r11, #0
+	mov	r12, #0
+
 #endif /* RESET_TO_SP_MIN */
 
 #if SP_MIN_WITH_SECURE_FIQ
 	route_fiq_to_sp_min r4
 #endif
 
-	bl	sp_min_early_platform_setup
+	mov	r0, r9
+	mov	r1, r10
+	mov	r2, r11
+	mov	r3, r12
+	bl	sp_min_early_platform_setup2
 	bl	sp_min_plat_arch_setup
 
 	/* Jump to the main function */
@@ -157,7 +164,7 @@ func sp_min_handle_smc
 	/* On SMC entry, `sp` points to `smc_ctx_t`. Save `lr`. */
 	str	lr, [sp, #SMC_CTX_LR_MON]
 
-	smcc_save_gp_mode_regs
+	smccc_save_gp_mode_regs
 
 	clrex_on_monitor_entry
 
@@ -215,7 +222,7 @@ func sp_min_handle_fiq
 	/* On SMC entry, `sp` points to `smc_ctx_t`. Save `lr`. */
 	str	lr, [sp, #SMC_CTX_LR_MON]
 
-	smcc_save_gp_mode_regs
+	smccc_save_gp_mode_regs
 
 	clrex_on_monitor_entry
 
@@ -291,18 +298,15 @@ func sp_min_warm_entrypoint
 	 * enter coherency (as CPUs already are); and there's no reason to have
 	 * caches disabled either.
 	 */
+#if HW_ASSISTED_COHERENCY || WARMBOOT_ENABLE_DCACHE_EARLY
+	mov	r0, #0
+#else
 	mov	r0, #DISABLE_DCACHE
+#endif
 	bl	bl32_plat_enable_mmu
 
 #if SP_MIN_WITH_SECURE_FIQ
 	route_fiq_to_sp_min r0
-#endif
-
-#if HW_ASSISTED_COHERENCY || WARMBOOT_ENABLE_DCACHE_EARLY
-	ldcopr	r0, SCTLR
-	orr	r0, r0, #SCTLR_C_BIT
-	stcopr	r0, SCTLR
-	isb
 #endif
 
 	bl	sp_min_warm_boot

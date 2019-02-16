@@ -1,16 +1,18 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
-#include <auth_mod.h>
-#include <bl1.h>
-#include <bl_common.h>
-#include <console.h>
-#include <debug.h>
-#include <platform.h>
+#include <bl1/bl1.h>
+#include <bl2/bl2.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/auth/auth_mod.h>
+#include <drivers/console.h>
+#include <plat/common/platform.h>
+
 #include "bl2_private.h"
 
 #ifdef AARCH32
@@ -45,6 +47,7 @@ void bl2_main(void)
 	/* Load the subsequent bootloader images. */
 	next_bl_ep_info = bl2_load_images();
 
+#if !BL2_AT_EL3
 #ifdef AARCH32
 	/*
 	 * For AArch32 state BL1 and BL2 share the MMU setup.
@@ -54,8 +57,6 @@ void bl2_main(void)
 	disable_mmu_icache_secure();
 #endif /* AARCH32 */
 
-
-#if !BL2_AT_EL3
 	console_flush();
 
 	/*

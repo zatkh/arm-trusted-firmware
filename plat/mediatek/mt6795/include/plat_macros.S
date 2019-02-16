@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <cci.h>
-#include <gic_v2.h>
+#include <drivers/arm/cci.h>
 #include <platform_def.h>
 
 .section .rodata.gic_reg_name, "aS"

@@ -1,11 +1,13 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <utils.h>
+
+#include <lib/utils.h>
+
 #include "sdei_private.h"
 
 #define MAP_OFF(_map, _mapping) ((_map) - (_mapping)->map)
@@ -21,7 +23,8 @@ sdei_entry_t *get_event_entry(sdei_ev_map_t *map)
 {
 	const sdei_mapping_t *mapping;
 	sdei_entry_t *cpu_priv_base;
-	unsigned int idx, base_idx;
+	unsigned int base_idx;
+	long int idx;
 
 	if (is_event_private(map)) {
 		/*
@@ -32,7 +35,7 @@ sdei_entry_t *get_event_entry(sdei_ev_map_t *map)
 		idx = MAP_OFF(map, mapping);
 
 		/* Base of private mappings for this CPU */
-		base_idx = plat_my_core_pos() * mapping->num_maps;
+		base_idx = plat_my_core_pos() * ((unsigned int) mapping->num_maps);
 		cpu_priv_base = &sdei_private_event_table[base_idx];
 
 		/*
@@ -52,7 +55,7 @@ sdei_entry_t *get_event_entry(sdei_ev_map_t *map)
  * Find event mapping for a given interrupt number: On success, returns pointer
  * to the event mapping. On error, returns NULL.
  */
-sdei_ev_map_t *find_event_map_by_intr(int intr_num, int shared)
+sdei_ev_map_t *find_event_map_by_intr(unsigned int intr_num, bool shared)
 {
 	const sdei_mapping_t *mapping;
 	sdei_ev_map_t *map;

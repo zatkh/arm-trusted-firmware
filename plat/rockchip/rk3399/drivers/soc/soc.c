@@ -4,16 +4,19 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <debug.h>
-#include <delay_timer.h>
+
+#include <platform_def.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/delay_timer.h>
+#include <lib/mmio.h>
+
 #include <dfs.h>
 #include <dram.h>
 #include <m0_ctl.h>
-#include <mmio.h>
 #include <plat_private.h>
-#include <platform_def.h>
 #include <rk3399_def.h>
 #include <secure.h>
 #include <soc.h>
@@ -42,6 +45,9 @@ const unsigned char rockchip_power_domain_tree_desc[] = {
 
 /* sleep data for pll suspend */
 static struct deepsleep_data_s slp_data;
+
+/* sleep data that needs to be accessed from pmusram */
+__pmusramdata struct pmu_sleep_data pmu_slp_data;
 
 static void set_pll_slow_mode(uint32_t pll_id)
 {
@@ -229,9 +235,9 @@ void set_pmu_rsthold(void)
 	uint32_t rstnhold_cofig0;
 	uint32_t rstnhold_cofig1;
 
-	slp_data.pmucru_rstnhold_con0 = mmio_read_32(PMUCRU_BASE +
+	pmu_slp_data.pmucru_rstnhold_con0 = mmio_read_32(PMUCRU_BASE +
 					    PMUCRU_RSTNHOLD_CON0);
-	slp_data.pmucru_rstnhold_con1 = mmio_read_32(PMUCRU_BASE +
+	pmu_slp_data.pmucru_rstnhold_con1 = mmio_read_32(PMUCRU_BASE +
 					    PMUCRU_RSTNHOLD_CON1);
 	rstnhold_cofig0 = BIT_WITH_WMSK(PRESETN_NOC_PMU_HOLD) |
 			  BIT_WITH_WMSK(PRESETN_INTMEM_PMU_HOLD) |
@@ -257,12 +263,33 @@ void set_pmu_rsthold(void)
 	mmio_write_32(PMUCRU_BASE + PMUCRU_RSTNHOLD_CON1, rstnhold_cofig1);
 }
 
-void restore_pmu_rsthold(void)
+void pmu_sgrf_rst_hld(void)
+{
+	mmio_write_32(PMUCRU_BASE + CRU_PMU_RSTHOLD_CON(1),
+		      CRU_PMU_SGRF_RST_HOLD);
+}
+
+/*
+ * When system reset in running state, we want the cpus to be reboot
+ * from maskrom (system reboot),
+ * the pmusgrf reset-hold bits needs to be released.
+ * When system wake up from system deep suspend, some soc will be reset
+ * when waked up,
+ * we want the bootcpu to be reboot from pmusram,
+ * the pmusgrf reset-hold bits needs to be held.
+ */
+__pmusramfunc void pmu_sgrf_rst_hld_release(void)
+{
+	mmio_write_32(PMUCRU_BASE + CRU_PMU_RSTHOLD_CON(1),
+		      CRU_PMU_SGRF_RST_RLS);
+}
+
+__pmusramfunc void restore_pmu_rsthold(void)
 {
 	mmio_write_32(PMUCRU_BASE + PMUCRU_RSTNHOLD_CON0,
-		      slp_data.pmucru_rstnhold_con0 | REG_SOC_WMSK);
+		      pmu_slp_data.pmucru_rstnhold_con0 | REG_SOC_WMSK);
 	mmio_write_32(PMUCRU_BASE + PMUCRU_RSTNHOLD_CON1,
-		      slp_data.pmucru_rstnhold_con1 | REG_SOC_WMSK);
+		      pmu_slp_data.pmucru_rstnhold_con1 | REG_SOC_WMSK);
 }
 
 /**

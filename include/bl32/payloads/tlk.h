@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __TLK_H__
-#define __TLK_H__
+#ifndef TLK_H
+#define TLK_H
 
-#include <utils_def.h>
+#include <lib/utils_def.h>
 
 /*
  * Generate function IDs for the Trusted OS/Apps
@@ -20,7 +20,9 @@
  */
 #define TLK_REGISTER_LOGBUF	TLK_TOS_YIELD_FID(0x1)
 #define TLK_REGISTER_REQBUF	TLK_TOS_YIELD_FID(0x2)
-#define TLK_REGISTER_NS_DRAM	TLK_TOS_YIELD_FID(0x4)
+#define TLK_SS_REGISTER_HANDLER	TLK_TOS_YIELD_FID(0x3)
+#define TLK_REGISTER_NS_DRAM_RANGES	TLK_TOS_YIELD_FID(0x4)
+#define TLK_SET_ROOT_OF_TRUST	TLK_TOS_YIELD_FID(0x5)
 #define TLK_RESUME_FID		TLK_TOS_YIELD_FID(0x100)
 #define TLK_SYSTEM_SUSPEND	TLK_TOS_YIELD_FID(0xE001)
 #define TLK_SYSTEM_RESUME	TLK_TOS_YIELD_FID(0xE002)
@@ -63,4 +65,4 @@
 #define TOS_UID			0xbf00ff01 /* Implementation UID */
 #define TOS_CALL_VERSION	0xbf00ff03 /* Trusted OS Call Version */
 
-#endif /* __TLK_H__ */
+#endif /* TLK_H */

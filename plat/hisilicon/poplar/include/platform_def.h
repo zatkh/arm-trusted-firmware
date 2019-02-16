@@ -1,18 +1,19 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLATFORM_DEF_H__
-#define __PLATFORM_DEF_H__
+#ifndef PLATFORM_DEF_H
+#define PLATFORM_DEF_H
 
 #include <arch.h>
-#include <common_def.h>
-#include <gic_common.h>
-#include <interrupt_props.h>
-#include <tbbr/tbbr_img_def.h>
-#include <utils_def.h>
+#include <common/interrupt_props.h>
+#include <common/tbbr/tbbr_img_def.h>
+#include <drivers/arm/gic_common.h>
+#include <lib/utils_def.h>
+#include <plat/common/common_def.h>
+
 #include "hi3798cv200.h"
 #include "poplar_layout.h"		/* BL memory region sizes, etc */
 
@@ -22,9 +23,9 @@
 #define PLATFORM_LINKER_FORMAT		"elf64-littleaarch64"
 #define PLATFORM_LINKER_ARCH		aarch64
 
-#define PLAT_ARM_CRASH_UART_BASE	PL011_UART0_BASE
-#define PLAT_ARM_CRASH_UART_CLK_IN_HZ	PL011_UART0_CLK_IN_HZ
-#define ARM_CONSOLE_BAUDRATE		PL011_BAUDRATE
+#define POPLAR_CRASH_UART_BASE		PL011_UART0_BASE
+#define POPLAR_CRASH_UART_CLK_IN_HZ	PL011_UART0_CLK_IN_HZ
+#define POPLAR_CONSOLE_BAUDRATE		PL011_BAUDRATE
 
 /* Generic platform constants */
 #define PLATFORM_STACK_SIZE		(0x800)
@@ -40,7 +41,7 @@
 /* IO framework user */
 #define MAX_IO_DEVICES			(4)
 #define MAX_IO_HANDLES			(4)
-#define MAX_IO_BLOCK_DEVICES		(2)
+#define MAX_IO_BLOCK_DEVICES		U(2)
 
 /* Memory size options */
 #define POPLAR_DRAM_SIZE_1G	0
@@ -88,12 +89,10 @@
 #define BL32_DRAM_BASE			0x03000000
 #define BL32_DRAM_LIMIT			0x04000000
 
-#if LOAD_IMAGE_V2
 #ifdef SPD_opteed
 /* Load pageable part of OP-TEE at end of allocated DRAM space for BL32 */
 #define POPLAR_OPTEE_PAGEABLE_LOAD_SIZE	0x400000 /* 4MB */
 #define POPLAR_OPTEE_PAGEABLE_LOAD_BASE	(BL32_DRAM_LIMIT - POPLAR_OPTEE_PAGEABLE_LOAD_SIZE) /* 0x03C0_0000 */
-#endif
 #endif
 
 #if (POPLAR_TSP_RAM_LOCATION_ID == POPLAR_DRAM_ID)
@@ -122,7 +121,8 @@
 #define PLAT_POPLAR_NS_IMAGE_OFFSET	0x37000000
 
 /* Page table and MMU setup constants */
-#define ADDR_SPACE_SIZE			(1ull << 32)
+#define PLAT_VIRT_ADDR_SPACE_SIZE   (1ULL << 32)
+#define PLAT_PHY_ADDR_SPACE_SIZE    (1ULL << 32)
 #define MAX_XLAT_TABLES			(4)
 #define MAX_MMAP_REGIONS		(16)
 
@@ -131,14 +131,14 @@
 
 /* Power states */
 #define PLAT_MAX_PWR_LVL		(MPIDR_AFFLVL1)
-#define PLAT_MAX_OFF_STATE		2
-#define PLAT_MAX_RET_STATE		1
+#define PLAT_MAX_OFF_STATE		U(2)
+#define PLAT_MAX_RET_STATE		U(1)
 
 /* Interrupt controller */
-#define PLAT_ARM_GICD_BASE	GICD_BASE
-#define PLAT_ARM_GICC_BASE	GICC_BASE
+#define POPLAR_GICD_BASE	GICD_BASE
+#define POPLAR_GICC_BASE	GICC_BASE
 
-#define PLAT_ARM_G1S_IRQ_PROPS(grp) \
+#define POPLAR_G1S_IRQ_PROPS(grp) \
 	INTR_PROP_DESC(HISI_IRQ_SEC_SGI_0, GIC_HIGHEST_SEC_PRIORITY, grp, \
 			GIC_INTR_CFG_LEVEL), \
 	INTR_PROP_DESC(HISI_IRQ_SEC_SGI_1, GIC_HIGHEST_SEC_PRIORITY, grp, \
@@ -166,6 +166,6 @@
 	INTR_PROP_DESC(HISI_IRQ_SEC_AXI, GIC_HIGHEST_SEC_PRIORITY, grp, \
 			GIC_INTR_CFG_LEVEL)
 
-#define PLAT_ARM_G0_IRQ_PROPS(grp)
+#define POPLAR_G0_IRQ_PROPS(grp)
 
-#endif /* __PLATFORM_DEF_H__ */
+#endif /* PLATFORM_DEF_H */

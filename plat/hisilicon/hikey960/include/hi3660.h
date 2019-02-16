@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef __HI3660_H__
-#define __HI3660_H__
+#ifndef HI3660_H
+#define HI3660_H
 
 #include <hi3660_crg.h>
 #include <hi3660_hkadc.h>
@@ -240,6 +240,27 @@
 #define PCTRL_PERI_CTRL3_REG		(PCTRL_REG_BASE + 0x010)
 #define PCTRL_PERI_CTRL24_REG		(PCTRL_REG_BASE + 0x064)
 
+#define GPIO0_BASE			UL(0xE8A0B000)
+#define GPIO1_BASE			UL(0xE8A0C000)
+#define GPIO2_BASE			UL(0xE8A0D000)
+#define GPIO3_BASE			UL(0xE8A0E000)
+#define GPIO4_BASE			UL(0xE8A0F000)
+#define GPIO5_BASE			UL(0xE8A10000)
+#define GPIO6_BASE			UL(0xE8A11000)
+#define GPIO7_BASE			UL(0xE8A12000)
+#define GPIO8_BASE			UL(0xE8A13000)
+#define GPIO9_BASE			UL(0xE8A14000)
+#define GPIO10_BASE			UL(0xE8A15000)
+#define GPIO11_BASE			UL(0xE8A16000)
+#define GPIO12_BASE			UL(0xE8A17000)
+#define GPIO13_BASE			UL(0xE8A18000)
+#define GPIO14_BASE			UL(0xE8A19000)
+#define GPIO15_BASE			UL(0xE8A1A000)
+#define GPIO16_BASE			UL(0xE8A1B000)
+#define GPIO17_BASE			UL(0xE8A1C000)
+#define GPIO20_BASE			UL(0xE8A1F000)
+#define GPIO21_BASE			UL(0xE8A20000)
+
 #define TZC_REG_BASE			0xE8A21000
 #define TZC_STAT0_REG			(TZC_REG_BASE + 0x800)
 #define TZC_EN0_REG			(TZC_REG_BASE + 0x804)
@@ -316,6 +337,9 @@
 #define MASK_UFS_DEVICE_RESET			(1 << 16)
 #define BIT_UFS_DEVICE_RESET			(1 << 0)
 
+#define GPIO18_BASE			UL(0xFF3B4000)
+#define GPIO19_BASE			UL(0xFF3B5000)
+
 #define IOMG_FIX_REG_BASE		0xFF3B6000
 
 /* GPIO150: LED */
@@ -342,4 +366,20 @@
 /* GPIO219: PD interrupt. pull up */
 #define IOCG_AO_043_REG			(IOCG_AO_REG_BASE + 0x030)
 
-#endif  /* __HI3660_H__ */
+#define EDMAC_BASE				0xfdf30000
+#define EDMAC_SEC_CTRL				(EDMAC_BASE + 0x694)
+#define EDMAC_AXI_CONF(x)			(EDMAC_BASE + 0x820 + (x << 6))
+#define EDMAC_SEC_CTRL_INTR_SEC			(1 << 1)
+#define EDMAC_SEC_CTRL_GLOBAL_SEC		(1 << 0)
+#define EDMAC_CHANNEL_NUMS				16
+
+#define IOMCU_DMAC_BASE			0xffd77000
+#define IOMCU_DMAC_SEC_CTRL		(IOMCU_DMAC_BASE + 0x694)
+#define IOMCU_DMAC_AXI_CONF(x)			(IOMCU_DMAC_BASE + 0x820 + ((x) << 6))
+#define IOMCU_DMAC_AXI_CONF_ARPROT_NS		(1 << 6)
+#define IOMCU_DMAC_AXI_CONF_AWPROT_NS		(1 << 18)
+#define IOMCU_DMAC_SEC_CTRL_INTR_SEC	(1 << 1)
+#define IOMCU_DMAC_SEC_CTRL_GLOBAL_SEC	(1 << 0)
+#define IOMCU_DMAC_CHANNEL_NUMS			8
+
+#endif /* HI3660_H */

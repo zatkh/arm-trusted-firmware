@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CONTEXT_H__
-#define __CONTEXT_H__
+#ifndef CONTEXT_H
+#define CONTEXT_H
+
+#include <lib/utils_def.h>
 
 /*******************************************************************************
  * Constants that allow assembler code to access members of and the 'gp_regs'
@@ -53,10 +55,12 @@
  ******************************************************************************/
 #define CTX_EL3STATE_OFFSET	(CTX_GPREGS_OFFSET + CTX_GPREGS_END)
 #define CTX_SCR_EL3		U(0x0)
-#define CTX_RUNTIME_SP		U(0x8)
-#define CTX_SPSR_EL3		U(0x10)
-#define CTX_ELR_EL3		U(0x18)
-#define CTX_EL3STATE_END	U(0x20)
+#define CTX_ESR_EL3		U(0x8)
+#define CTX_RUNTIME_SP		U(0x10)
+#define CTX_SPSR_EL3		U(0x18)
+#define CTX_ELR_EL3		U(0x20)
+#define CTX_UNUSED		U(0x28)
+#define CTX_EL3STATE_END	U(0x30)
 
 /*******************************************************************************
  * Constants that allow assembler code to access members of and the
@@ -124,8 +128,8 @@
  * Constants that allow assembler code to access members of and the 'fp_regs'
  * structure at their correct offsets.
  ******************************************************************************/
-#if CTX_INCLUDE_FPREGS
 #define CTX_FPREGS_OFFSET	(CTX_SYSREGS_OFFSET + CTX_SYSREGS_END)
+#if CTX_INCLUDE_FPREGS
 #define CTX_FP_Q0		U(0x0)
 #define CTX_FP_Q1		U(0x10)
 #define CTX_FP_Q2		U(0x20)
@@ -166,13 +170,21 @@
 #else
 #define CTX_FPREGS_END		U(0x210) /* Align to the next 16 byte boundary */
 #endif
+#else
+#define CTX_FPREGS_END		U(0)
 #endif
+
+#define CTX_CVE_2018_3639_OFFSET	(CTX_FPREGS_OFFSET + CTX_FPREGS_END)
+#define CTX_CVE_2018_3639_DISABLE	U(0)
+#define CTX_CVE_2018_3639_END		U(0x10) /* Align to the next 16 byte boundary */
 
 #ifndef __ASSEMBLY__
 
-#include <cassert.h>
-#include <platform_def.h>	/* for CACHE_WRITEBACK_GRANULE */
 #include <stdint.h>
+
+#include <platform_def.h>	/* for CACHE_WRITEBACK_GRANULE */
+
+#include <lib/cassert.h>
 
 /*
  * Common constants to help define the 'cpu_context' structure and its
@@ -191,6 +203,7 @@
 #define CTX_FPREG_ALL		(CTX_FPREGS_END >> DWORD_SHIFT)
 #endif
 #define CTX_EL3STATE_ALL	(CTX_EL3STATE_END >> DWORD_SHIFT)
+#define CTX_CVE_2018_3639_ALL	(CTX_CVE_2018_3639_END >> DWORD_SHIFT)
 
 /*
  * AArch64 general purpose register context structure. Usually x0-x18,
@@ -223,13 +236,16 @@ DEFINE_REG_STRUCT(fp_regs, CTX_FPREG_ALL);
  */
 DEFINE_REG_STRUCT(el3_state, CTX_EL3STATE_ALL);
 
+/* Function pointer used by CVE-2018-3639 dynamic mitigation */
+DEFINE_REG_STRUCT(cve_2018_3639, CTX_CVE_2018_3639_ALL);
+
 /*
  * Macros to access members of any of the above structures using their
  * offsets
  */
-#define read_ctx_reg(ctx, offset)	((ctx)->_regs[offset >> DWORD_SHIFT])
-#define write_ctx_reg(ctx, offset, val)	(((ctx)->_regs[offset >> DWORD_SHIFT]) \
-					 = val)
+#define read_ctx_reg(ctx, offset)	((ctx)->_regs[(offset) >> DWORD_SHIFT])
+#define write_ctx_reg(ctx, offset, val)	(((ctx)->_regs[(offset) >> DWORD_SHIFT]) \
+					 = (uint64_t) (val))
 
 /*
  * Top-level context structure which is used by EL3 firmware to
@@ -247,6 +263,7 @@ typedef struct cpu_context {
 #if CTX_INCLUDE_FPREGS
 	fp_regs_t fpregs_ctx;
 #endif
+	cve_2018_3639_t cve_2018_3639_ctx;
 } cpu_context_t;
 
 /* Macros to access members of the 'cpu_context_t' structure */
@@ -256,6 +273,7 @@ typedef struct cpu_context {
 #endif
 #define get_sysregs_ctx(h)	(&((cpu_context_t *) h)->sysregs_ctx)
 #define get_gpregs_ctx(h)	(&((cpu_context_t *) h)->gpregs_ctx)
+#define get_cve_2018_3639_ctx(h)	(&((cpu_context_t *) h)->cve_2018_3639_ctx)
 
 /*
  * Compile time assertions related to the 'cpu_context' structure to
@@ -272,6 +290,8 @@ CASSERT(CTX_FPREGS_OFFSET == __builtin_offsetof(cpu_context_t, fpregs_ctx), \
 #endif
 CASSERT(CTX_EL3STATE_OFFSET == __builtin_offsetof(cpu_context_t, el3state_ctx), \
 	assert_core_context_el3state_offset_mismatch);
+CASSERT(CTX_CVE_2018_3639_OFFSET == __builtin_offsetof(cpu_context_t, cve_2018_3639_ctx), \
+	assert_core_context_cve_2018_3639_offset_mismatch);
 
 /*
  * Helper macro to set the general purpose registers that correspond to
@@ -329,4 +349,4 @@ void fpregs_context_restore(fp_regs_t *regs);
 
 #endif /* __ASSEMBLY__ */
 
-#endif /* __CONTEXT_H__ */
+#endif /* CONTEXT_H */

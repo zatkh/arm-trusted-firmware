@@ -1,15 +1,19 @@
 /*
- * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <debug.h>
-#include <io_driver.h>
-#include <io_storage.h>
 #include <string.h>
-#include <utils.h>
+
+#include <platform_def.h>
+
+#include <common/debug.h>
+#include <drivers/io/io_driver.h>
+#include <drivers/io/io_memmap.h>
+#include <drivers/io/io_storage.h>
+#include <lib/utils.h>
 
 /* As we need to be able to keep state for seek, only one file can be open
  * at a time. Make this a structure and point to the entity->info. When we
@@ -28,7 +32,7 @@ typedef struct {
 static file_state_t current_file = {0};
 
 /* Identify the device type as memmap */
-io_type_t device_type_memmap(void)
+static io_type_t device_type_memmap(void)
 {
 	return IO_TYPE_MEMMAP;
 }
@@ -168,7 +172,6 @@ static int memmap_block_read(io_entity_t *entity, uintptr_t buffer,
 	size_t pos_after;
 
 	assert(entity != NULL);
-	assert(buffer != (uintptr_t)NULL);
 	assert(length_read != NULL);
 
 	fp = (file_state_t *) entity->info;
@@ -196,7 +199,6 @@ static int memmap_block_write(io_entity_t *entity, const uintptr_t buffer,
 	size_t pos_after;
 
 	assert(entity != NULL);
-	assert(buffer != (uintptr_t)NULL);
 	assert(length_written != NULL);
 
 	fp = (file_state_t *) entity->info;

@@ -1,14 +1,15 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __XLAT_TABLES_DEFS_H__
-#define __XLAT_TABLES_DEFS_H__
+#ifndef XLAT_TABLES_DEFS_H
+#define XLAT_TABLES_DEFS_H
 
 #include <arch.h>
-#include <utils_def.h>
+#include <lib/utils_def.h>
+#include <lib/xlat_tables/xlat_mmu_helpers.h>
 
 /* Miscellaneous MMU related constants */
 #define NUM_2MB_IN_GB		(U(1) << 9)
@@ -22,6 +23,10 @@
 #define ONE_GB_INDEX(x)		((x) >> ONE_GB_SHIFT)
 #define TWO_MB_INDEX(x)		((x) >> TWO_MB_SHIFT)
 #define FOUR_KB_INDEX(x)	((x) >> FOUR_KB_SHIFT)
+
+#define PAGE_SIZE_4KB		U(4096)
+#define PAGE_SIZE_16KB		U(16384)
+#define PAGE_SIZE_64KB		U(65536)
 
 #define INVALID_DESC		U(0x0)
 /*
@@ -61,12 +66,12 @@
 
 /*
  * The ARMv8-A architecture allows translation granule sizes of 4KB, 16KB or
- * 64KB. However, TF only supports the 4KB case at the moment.
+ * 64KB. However, only 4KB are supported at the moment.
  */
 #define PAGE_SIZE_SHIFT		FOUR_KB_SHIFT
 #define PAGE_SIZE		(U(1) << PAGE_SIZE_SHIFT)
-#define PAGE_SIZE_MASK		(PAGE_SIZE - 1)
-#define IS_PAGE_ALIGNED(addr)	(((addr) & PAGE_SIZE_MASK) == 0)
+#define PAGE_SIZE_MASK		(PAGE_SIZE - U(1))
+#define IS_PAGE_ALIGNED(addr)	(((addr) & PAGE_SIZE_MASK) == U(0))
 
 #define XLAT_ENTRY_SIZE_SHIFT	U(3) /* Each MMU table entry is 8 bytes (1 << 3) */
 #define XLAT_ENTRY_SIZE		(U(1) << XLAT_ENTRY_SIZE_SHIFT)
@@ -79,7 +84,7 @@
 /* Values for number of entries in each MMU translation table */
 #define XLAT_TABLE_ENTRIES_SHIFT (XLAT_TABLE_SIZE_SHIFT - XLAT_ENTRY_SIZE_SHIFT)
 #define XLAT_TABLE_ENTRIES	(U(1) << XLAT_TABLE_ENTRIES_SHIFT)
-#define XLAT_TABLE_ENTRIES_MASK	(XLAT_TABLE_ENTRIES - 1)
+#define XLAT_TABLE_ENTRIES_MASK	(XLAT_TABLE_ENTRIES - U(1))
 
 /* Values to convert a memory address to an index into a translation table */
 #define L3_XLAT_ADDRESS_SHIFT	PAGE_SIZE_SHIFT
@@ -89,9 +94,9 @@
 #define XLAT_ADDR_SHIFT(level)	(PAGE_SIZE_SHIFT + \
 		  ((XLAT_TABLE_LEVEL_MAX - (level)) * XLAT_TABLE_ENTRIES_SHIFT))
 
-#define XLAT_BLOCK_SIZE(level)	((u_register_t)1 << XLAT_ADDR_SHIFT(level))
+#define XLAT_BLOCK_SIZE(level)	(UL(1) << XLAT_ADDR_SHIFT(level))
 /* Mask to get the bits used to index inside a block of a certain level */
-#define XLAT_BLOCK_MASK(level)	(XLAT_BLOCK_SIZE(level) - 1)
+#define XLAT_BLOCK_MASK(level)	(XLAT_BLOCK_SIZE(level) - UL(1))
 /* Mask to get the address bits common to a block of a certain table level*/
 #define XLAT_ADDR_MASK(level)	(~XLAT_BLOCK_MASK(level))
 /*
@@ -106,18 +111,17 @@
  * Permissions bits, and does not define an AP[0] bit.
  *
  * AP[1] is valid only for a stage 1 translation that supports two VA ranges
- * (i.e. in the ARMv8A.0 architecture, that is the S-EL1&0 regime).
- *
- * AP[1] is RES0 for stage 1 translations that support only one VA range
- * (e.g. EL3).
+ * (i.e. in the ARMv8A.0 architecture, that is the S-EL1&0 regime). It is RES1
+ * when stage 1 translations can only support one VA range.
  */
 #define AP2_SHIFT			U(0x7)
-#define AP2_RO				U(0x1)
-#define AP2_RW				U(0x0)
+#define AP2_RO				ULL(0x1)
+#define AP2_RW				ULL(0x0)
 
 #define AP1_SHIFT			U(0x6)
-#define AP1_ACCESS_UNPRIVILEGED		U(0x1)
-#define AP1_NO_ACCESS_UNPRIVILEGED	U(0x0)
+#define AP1_ACCESS_UNPRIVILEGED		ULL(0x1)
+#define AP1_NO_ACCESS_UNPRIVILEGED	ULL(0x0)
+#define AP1_RES1			ULL(0x1)
 
 /*
  * The following definitions must all be passed to the LOWER_ATTRS() macro to
@@ -127,10 +131,11 @@
 #define AP_RW				(AP2_RW << 5)
 #define AP_ACCESS_UNPRIVILEGED		(AP1_ACCESS_UNPRIVILEGED    << 4)
 #define AP_NO_ACCESS_UNPRIVILEGED	(AP1_NO_ACCESS_UNPRIVILEGED << 4)
+#define AP_ONE_VA_RANGE_RES1		(AP1_RES1 << 4)
 #define NS				(U(0x1) << 3)
-#define ATTR_NON_CACHEABLE_INDEX	U(0x2)
-#define ATTR_DEVICE_INDEX		U(0x1)
-#define ATTR_IWBWA_OWBWA_NTR_INDEX	U(0x0)
+#define ATTR_NON_CACHEABLE_INDEX	ULL(0x2)
+#define ATTR_DEVICE_INDEX		ULL(0x1)
+#define ATTR_IWBWA_OWBWA_NTR_INDEX	ULL(0x0)
 #define LOWER_ATTRS(x)			(((x) & U(0xfff)) << 2)
 
 /* Normal Memory, Outer Write-Through non-transient, Inner Non-cacheable */
@@ -165,16 +170,4 @@
 #define XN_SHIFT			54
 #define UXN_SHIFT			XN_SHIFT
 
-/*
- * Flags to override default values used to program system registers while
- * enabling the MMU.
- */
-#define DISABLE_DCACHE			(U(1) << 0)
-
-/*
- * This flag marks the translation tables are Non-cacheable for MMU accesses.
- * If the flag is not specified, by default the tables are cacheable.
- */
-#define XLAT_TABLE_NC			(U(1) << 1)
-
-#endif /* __XLAT_TABLES_DEFS_H__ */
+#endif /* XLAT_TABLES_DEFS_H */

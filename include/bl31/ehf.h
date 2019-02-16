@@ -1,39 +1,41 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __EHF_H__
-#define __EHF_H__
+#ifndef EHF_H
+#define EHF_H
 
 #ifndef __ASSEMBLY__
 
+#include <cdefs.h>
 #include <stdint.h>
-#include <utils_def.h>
+
+#include <lib/utils_def.h>
 
 /* Valid priorities set bit 0 of the priority handler. */
-#define _EHF_PRI_VALID	(((uintptr_t) 1) << 0)
+#define EHF_PRI_VALID_	BIT(0)
 
 /* Marker for no handler registered for a valid priority */
-#define _EHF_NO_HANDLER	(0 | _EHF_PRI_VALID)
+#define EHF_NO_HANDLER_	(0U | EHF_PRI_VALID_)
 
 /* Extract the specified number of top bits from 7 lower bits of priority */
 #define EHF_PRI_TO_IDX(pri, plat_bits) \
-	((pri & 0x7f) >> (7 - plat_bits))
+	((((unsigned) (pri)) & 0x7fu) >> (7u - (plat_bits)))
 
 /* Install exception priority descriptor at a suitable index */
 #define EHF_PRI_DESC(plat_bits, priority) \
 	[EHF_PRI_TO_IDX(priority, plat_bits)] = { \
-		.ehf_handler = _EHF_NO_HANDLER, \
+		.ehf_handler = EHF_NO_HANDLER_, \
 	}
 
 /* Macro for platforms to regiter its exception priorities */
 #define EHF_REGISTER_PRIORITIES(priorities, num, bits) \
 	const ehf_priorities_t exception_data = { \
-		.num_priorities = num, \
-		.ehf_priorities = priorities, \
-		.pri_bits = bits, \
+		.num_priorities = (num), \
+		.ehf_priorities = (priorities), \
+		.pri_bits = (bits), \
 	}
 
 /*
@@ -72,19 +74,19 @@ typedef struct ehf_pri_desc {
 	uintptr_t ehf_handler;
 } ehf_pri_desc_t;
 
-typedef struct ehf_priorities {
+typedef struct ehf_priority_type {
 	ehf_pri_desc_t *ehf_priorities;
 	unsigned int num_priorities;
-	int pri_bits;
+	unsigned int pri_bits;
 } ehf_priorities_t;
 
 void ehf_init(void);
 void ehf_activate_priority(unsigned int priority);
 void ehf_deactivate_priority(unsigned int priority);
 void ehf_register_priority_handler(unsigned int pri, ehf_handler_t handler);
-void ehf_allow_ns_preemption(void);
+void ehf_allow_ns_preemption(uint64_t preempt_ret_code);
 unsigned int ehf_is_ns_preemption_allowed(void);
 
 #endif /* __ASSEMBLY__ */
 
-#endif /* __EHF_H__ */
+#endif /* EHF_H */

@@ -1,24 +1,27 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <debug.h>
-#include <emmc.h>
 #include <errno.h>
-#include <firmware_image_package.h>
-#include <io_block.h>
-#include <io_driver.h>
-#include <io_fip.h>
-#include <io_memmap.h>
-#include <io_storage.h>
-#include <mmio.h>
-#include <platform_def.h>
-#include <semihosting.h>	/* For FOPEN_MODE_... */
 #include <string.h>
+
+#include <platform_def.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/io/io_block.h>
+#include <drivers/io/io_driver.h>
+#include <drivers/io/io_fip.h>
+#include <drivers/io/io_memmap.h>
+#include <drivers/io/io_storage.h>
+#include <drivers/mmc.h>
+#include <lib/mmio.h>
+#include <lib/semihosting.h>
+#include <tools_share/firmware_image_package.h>
+
 #include "hikey_private.h"
 
 #define EMMC_BLOCK_SHIFT			9
@@ -59,14 +62,10 @@ static const io_block_dev_spec_t emmc_dev_spec = {
 	},
 #endif
 	.ops		= {
-		.read	= emmc_read_blocks,
-		.write	= emmc_write_blocks,
+		.read	= mmc_read_blocks,
+		.write	= mmc_write_blocks,
 	},
-	.block_size	= EMMC_BLOCK_SIZE,
-};
-
-static const io_uuid_spec_t bl2_uuid_spec = {
-	.uuid = UUID_TRUSTED_BOOT_FIRMWARE_BL2,
+	.block_size	= MMC_BLOCK_SIZE,
 };
 
 static const io_uuid_spec_t bl31_uuid_spec = {
@@ -93,16 +92,49 @@ static const io_uuid_spec_t scp_bl2_uuid_spec = {
 	.uuid = UUID_SCP_FIRMWARE_SCP_BL2,
 };
 
+#if TRUSTED_BOARD_BOOT
+static const io_uuid_spec_t trusted_key_cert_uuid_spec = {
+	.uuid = UUID_TRUSTED_KEY_CERT,
+};
+
+static const io_uuid_spec_t scp_fw_key_cert_uuid_spec = {
+	.uuid = UUID_SCP_FW_KEY_CERT,
+};
+
+static const io_uuid_spec_t soc_fw_key_cert_uuid_spec = {
+	.uuid = UUID_SOC_FW_KEY_CERT,
+};
+
+static const io_uuid_spec_t tos_fw_key_cert_uuid_spec = {
+	.uuid = UUID_TRUSTED_OS_FW_KEY_CERT,
+};
+
+static const io_uuid_spec_t nt_fw_key_cert_uuid_spec = {
+	.uuid = UUID_NON_TRUSTED_FW_KEY_CERT,
+};
+
+static const io_uuid_spec_t scp_fw_cert_uuid_spec = {
+	.uuid = UUID_SCP_FW_CONTENT_CERT,
+};
+
+static const io_uuid_spec_t soc_fw_cert_uuid_spec = {
+	.uuid = UUID_SOC_FW_CONTENT_CERT,
+};
+
+static const io_uuid_spec_t tos_fw_cert_uuid_spec = {
+	.uuid = UUID_TRUSTED_OS_FW_CONTENT_CERT,
+};
+
+static const io_uuid_spec_t nt_fw_cert_uuid_spec = {
+	.uuid = UUID_NON_TRUSTED_FW_CONTENT_CERT,
+};
+#endif /* TRUSTED_BOARD_BOOT */
+
 static const struct plat_io_policy policies[] = {
 	[FIP_IMAGE_ID] = {
 		&emmc_dev_handle,
 		(uintptr_t)&emmc_fip_spec,
 		check_emmc
-	},
-	[BL2_IMAGE_ID] = {
-		&fip_dev_handle,
-		(uintptr_t)&bl2_uuid_spec,
-		check_fip
 	},
 	[SCP_BL2_IMAGE_ID] = {
 		&fip_dev_handle,
@@ -133,7 +165,54 @@ static const struct plat_io_policy policies[] = {
 		&fip_dev_handle,
 		(uintptr_t)&bl33_uuid_spec,
 		check_fip
-	}
+	},
+#if TRUSTED_BOARD_BOOT
+	[TRUSTED_KEY_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&trusted_key_cert_uuid_spec,
+		check_fip
+	},
+	[SCP_FW_KEY_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&scp_fw_key_cert_uuid_spec,
+		check_fip
+	},
+	[SOC_FW_KEY_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&soc_fw_key_cert_uuid_spec,
+		check_fip
+	},
+	[TRUSTED_OS_FW_KEY_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&tos_fw_key_cert_uuid_spec,
+		check_fip
+	},
+	[NON_TRUSTED_FW_KEY_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&nt_fw_key_cert_uuid_spec,
+		check_fip
+	},
+	[SCP_FW_CONTENT_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&scp_fw_cert_uuid_spec,
+		check_fip
+	},
+	[SOC_FW_CONTENT_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&soc_fw_cert_uuid_spec,
+		check_fip
+	},
+	[TRUSTED_OS_FW_CONTENT_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&tos_fw_cert_uuid_spec,
+		check_fip
+	},
+	[NON_TRUSTED_FW_CONTENT_CERT_ID] = {
+		&fip_dev_handle,
+		(uintptr_t)&nt_fw_cert_uuid_spec,
+		check_fip
+	},
+#endif /* TRUSTED_BOARD_BOOT */
 };
 
 static int check_emmc(const uintptr_t spec)

@@ -1,15 +1,20 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <bl_common.h>
-#include <debug.h>
-#include <interrupt_mgmt.h>
+#include <assert.h>
+
 #include <platform_def.h>
-#include <xlat_tables_v2.h>
+
+#include <arch_helpers.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <bl31/interrupt_mgmt.h>
+#include <drivers/console.h>
+#include <drivers/ti/uart/uart_16550.h>
+#include <lib/xlat_tables/xlat_tables_v2.h>
 
 #include "rpi3_hw.h"
 #include "rpi3_private.h"
@@ -20,7 +25,12 @@
 
 #define MAP_SHARED_RAM	MAP_REGION_FLAT(SHARED_RAM_BASE,		\
 					SHARED_RAM_SIZE,		\
-					MT_DEVICE  | MT_RW | MT_SECURE)
+					MT_DEVICE | MT_RW | MT_SECURE)
+
+#ifdef RPI3_PRELOADED_DTB_BASE
+#define MAP_NS_DTB	MAP_REGION_FLAT(RPI3_PRELOADED_DTB_BASE, 0x10000, \
+					MT_MEMORY | MT_RW | MT_NS)
+#endif
 
 #define MAP_NS_DRAM0	MAP_REGION_FLAT(NS_DRAM0_BASE, NS_DRAM0_SIZE,	\
 					MT_MEMORY | MT_RW | MT_NS)
@@ -32,6 +42,13 @@
 #define MAP_BL32_MEM	MAP_REGION_FLAT(BL32_MEM_BASE, BL32_MEM_SIZE,	\
 					MT_MEMORY | MT_RW | MT_SECURE)
 
+#ifdef SPD_opteed
+#define MAP_OPTEE_PAGEABLE	MAP_REGION_FLAT(		\
+				RPI3_OPTEE_PAGEABLE_LOAD_BASE,	\
+				RPI3_OPTEE_PAGEABLE_LOAD_SIZE,	\
+				MT_MEMORY | MT_RW | MT_SECURE)
+#endif
+
 /*
  * Table of regions for various BL stages to map using the MMU.
  */
@@ -40,6 +57,9 @@ static const mmap_region_t plat_rpi3_mmap[] = {
 	MAP_SHARED_RAM,
 	MAP_DEVICE0,
 	MAP_FIP,
+#ifdef SPD_opteed
+	MAP_OPTEE_PAGEABLE,
+#endif
 	{0}
 };
 #endif
@@ -61,12 +81,42 @@ static const mmap_region_t plat_rpi3_mmap[] = {
 static const mmap_region_t plat_rpi3_mmap[] = {
 	MAP_SHARED_RAM,
 	MAP_DEVICE0,
+#ifdef RPI3_PRELOADED_DTB_BASE
+	MAP_NS_DTB,
+#endif
 #ifdef BL32_BASE
 	MAP_BL32_MEM,
 #endif
 	{0}
 };
 #endif
+
+/*******************************************************************************
+ * Function that sets up the console
+ ******************************************************************************/
+static console_16550_t rpi3_console;
+
+void rpi3_console_init(void)
+{
+	int console_scope = CONSOLE_FLAG_BOOT;
+#if RPI3_RUNTIME_UART != -1
+	console_scope |= CONSOLE_FLAG_RUNTIME;
+#endif
+	int rc = console_16550_register(PLAT_RPI3_UART_BASE,
+					PLAT_RPI3_UART_CLK_IN_HZ,
+					PLAT_RPI3_UART_BAUDRATE,
+					&rpi3_console);
+	if (rc == 0) {
+		/*
+		 * The crash console doesn't use the multi console API, it uses
+		 * the core console functions directly. It is safe to call panic
+		 * and let it print debug information.
+		 */
+		panic();
+	}
+
+	console_set_scope(&rpi3_console.console, console_scope);
+}
 
 /*******************************************************************************
  * Function that sets up the translation tables.
@@ -162,5 +212,21 @@ unsigned int plat_get_syscnt_freq2(void)
 
 uint32_t plat_ic_get_pending_interrupt_type(void)
 {
+	ERROR("rpi3: Interrupt routed to EL3.\n");
 	return INTR_TYPE_INVAL;
+}
+
+uint32_t plat_interrupt_type_to_line(uint32_t type, uint32_t security_state)
+{
+	assert((type == INTR_TYPE_S_EL1) || (type == INTR_TYPE_EL3) ||
+	       (type == INTR_TYPE_NS));
+
+	assert(sec_state_is_valid(security_state));
+
+	/* Non-secure interrupts are signalled on the IRQ line always. */
+	if (type == INTR_TYPE_NS)
+		return __builtin_ctz(SCR_IRQ_BIT);
+
+	/* Secure interrupts are signalled on the FIQ line always. */
+	return  __builtin_ctz(SCR_FIQ_BIT);
 }

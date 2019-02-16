@@ -4,11 +4,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <platform_def.h>
+
 #include <arch_helpers.h>
-#include <debug.h>
+#include <common/debug.h>
+
 #include <dram.h>
 #include <plat_private.h>
-#include <platform_def.h>
+#include <pmu.h>
+#include <pmu_bits.h>
 #include <pmu_regs.h>
 #include <rk3399_def.h>
 #include <secure.h>
@@ -85,10 +89,11 @@ static __pmusramfunc uint32_t sram_get_timer_value(void)
 
 static __pmusramfunc void sram_udelay(uint32_t usec)
 {
-	uint32_t start, cnt, delta, delta_us;
+	uint32_t start, cnt, delta, total_ticks;
 
 	/* counter is decreasing */
 	start = sram_get_timer_value();
+	total_ticks = usec * SYS_COUNTER_FREQ_IN_MHZ;
 	do {
 		cnt = sram_get_timer_value();
 		if (cnt > start) {
@@ -96,8 +101,7 @@ static __pmusramfunc void sram_udelay(uint32_t usec)
 			delta += start;
 		} else
 			delta = start - cnt;
-		delta_us = (delta * SYS_COUNTER_FREQ_IN_MHZ);
-	} while (delta_us < usec);
+	} while (delta <= total_ticks);
 }
 
 static __pmusramfunc void configure_sgrf(void)
@@ -656,6 +660,30 @@ __pmusramfunc static void pmusram_restore_pll(int pll_id, uint32_t *src)
 		;
 }
 
+__pmusramfunc static void pmusram_enable_watchdog(void)
+{
+	/* Make the watchdog use the first global reset. */
+	mmio_write_32(CRU_BASE + CRU_GLB_RST_CON, 1 << 1);
+
+	/*
+	 * This gives the system ~8 seconds before reset. The pclk for the
+	 * watchdog is 4MHz on reset. The value of 0x9 in WDT_TORR means that
+	 * the watchdog will wait for 0x1ffffff cycles before resetting.
+	 */
+	mmio_write_32(WDT0_BASE + 4, 0x9);
+
+	/* Enable the watchdog */
+	mmio_setbits_32(WDT0_BASE, 0x1);
+
+	/* Magic reset the watchdog timer value for WDT_CRR. */
+	mmio_write_32(WDT0_BASE + 0xc, 0x76);
+
+	secure_watchdog_ungate();
+
+	/* The watchdog is in PD_ALIVE, so deidle it. */
+	mmio_clrbits_32(PMU_BASE + PMU_BUS_CLR, PMU_CLR_ALIVE);
+}
+
 void dmc_suspend(void)
 {
 	struct rk3399_sdram_params *sdram_params = &sdram_config;
@@ -726,6 +754,9 @@ __pmusramfunc void dmc_resume(void)
 	uint32_t channel_mask = 0;
 	uint32_t channel;
 
+	pmusram_enable_watchdog();
+	pmu_sgrf_rst_hld_release();
+	restore_pmu_rsthold();
 	sram_secure_timer_init();
 
 	/*

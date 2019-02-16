@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __RK3399_MCU_H__
-#define __RK3399_MCU_H__
+#ifndef RK3399_MCU_H
+#define RK3399_MCU_H
 
 #include <addressmap.h>
 
@@ -25,10 +25,8 @@ typedef unsigned int uint32_t;
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
-void handle_suspend(void);
-void handle_dram(void);
 void stopwatch_init_usecs_expire(unsigned int usecs);
 int stopwatch_expired(void);
 void stopwatch_reset(void);
 
-#endif /* __RK3399_MCU_H__ */
+#endif /* RK3399_MCU_H */

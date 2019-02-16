@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CRYPTO_MOD_H__
-#define __CRYPTO_MOD_H__
+#ifndef CRYPTO_MOD_H
+#define CRYPTO_MOD_H
 
 /* Return values */
 enum crypto_ret_value {
@@ -43,7 +43,7 @@ typedef struct crypto_lib_desc_s {
 void crypto_mod_init(void);
 int crypto_mod_verify_signature(void *data_ptr, unsigned int data_len,
 				void *sig_ptr, unsigned int sig_len,
-				void *sig_alg, unsigned int sig_alg_len,
+				void *sig_alg_ptr, unsigned int sig_alg_len,
 				void *pk_ptr, unsigned int pk_len);
 int crypto_mod_verify_hash(void *data_ptr, unsigned int data_len,
 			   void *digest_info_ptr, unsigned int digest_info_len);
@@ -57,4 +57,6 @@ int crypto_mod_verify_hash(void *data_ptr, unsigned int data_len,
 		.verify_hash = _verify_hash \
 	}
 
-#endif /* __CRYPTO_MOD_H__ */
+extern const crypto_lib_desc_t crypto_lib_desc;
+
+#endif /* CRYPTO_MOD_H */

@@ -1,17 +1,16 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <bl_common.h>
-#include <console.h>
-#include <debug.h>
-#include <plat_arm.h>
-#include <platform_tsp.h>
-#include "../zynqmp_private.h"
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/console.h>
+#include <plat/arm/common/plat_arm.h>
 
-#define BL32_END (unsigned long)(&__BL32_END__)
+#include <plat_private.h>
+#include <platform_tsp.h>
 
 /*******************************************************************************
  * Initialize the UART
@@ -44,14 +43,19 @@ void tsp_platform_setup(void)
  ******************************************************************************/
 void tsp_plat_arch_setup(void)
 {
-	arm_setup_page_tables(BL32_BASE,
-			      BL32_END - BL32_BASE,
-			      BL_CODE_BASE,
-			      BL_CODE_END,
-			      BL_RO_DATA_BASE,
-			      BL_RO_DATA_END,
-			      BL_COHERENT_RAM_BASE,
-			      BL_COHERENT_RAM_END
-			      );
+	const mmap_region_t bl_regions[] = {
+		MAP_REGION_FLAT(BL32_BASE, BL32_END - BL32_BASE,
+			MT_MEMORY | MT_RW | MT_SECURE),
+		MAP_REGION_FLAT(BL_CODE_BASE, BL_CODE_END - BL_CODE_BASE,
+			MT_CODE | MT_SECURE),
+		MAP_REGION_FLAT(BL_RO_DATA_BASE, BL_RO_DATA_END - BL_RO_DATA_BASE,
+			MT_RO_DATA | MT_SECURE),
+		MAP_REGION_FLAT(BL_COHERENT_RAM_BASE,
+			BL_COHERENT_RAM_END - BL_COHERENT_RAM_BASE,
+			MT_DEVICE | MT_RW | MT_SECURE),
+		{0}
+	};
+
+	setup_page_tables(bl_regions, plat_arm_get_mmap());
 	enable_mmu_el1(0);
 }

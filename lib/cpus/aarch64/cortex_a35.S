@@ -6,7 +6,7 @@
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl_common.h>
+#include <common/bl_common.h>
 #include <cortex_a35.h>
 #include <cpu_macros.S>
 #include <plat_macros.S>
@@ -113,6 +113,16 @@ func cortex_a35_cluster_pwr_dwn
 	mov	x30, x18
 	b	cortex_a35_disable_smp
 endfunc cortex_a35_cluster_pwr_dwn
+
+#if REPORT_ERRATA
+/*
+ * Errata printing function for Cortex A35. Must follow AAPCS.
+ */
+func cortex_a35_errata_report
+	ret
+endfunc cortex_a35_errata_report
+#endif
+
 
 	/* ---------------------------------------------
 	 * This function provides cortex_a35 specific

@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __GPT_H__
-#define __GPT_H__
+#ifndef GPT_H
+#define GPT_H
 
-#include <partition.h>
+#include <drivers/partition/partition.h>
 
 #define PARTITION_TYPE_GPT		0xee
 #define GPT_HEADER_OFFSET		PARTITION_BLOCK_SIZE
@@ -48,4 +48,4 @@ typedef struct gpt_header {
 
 int parse_gpt_entry(gpt_entry_t *gpt_entry, partition_entry_t *entry);
 
-#endif	/* __GPT_H__ */
+#endif /* GPT_H */

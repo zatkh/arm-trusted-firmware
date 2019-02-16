@@ -4,18 +4,19 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arm_gic.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <console.h>
-#include <coreboot.h>
-#include <debug.h>
-#include <gpio.h>
-#include <mmio.h>
+#include <string.h>
+
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/console.h>
+#include <drivers/gpio.h>
+#include <lib/coreboot.h>
+#include <lib/mmio.h>
+#include <plat/common/platform.h>
+
 #include <plat_params.h>
 #include <plat_private.h>
-#include <platform.h>
-#include <string.h>
 
 static struct gpio_info param_reset;
 static struct gpio_info param_poweroff;
@@ -92,7 +93,7 @@ void params_early_setup(void *plat_param_from_bl2)
 			break;
 #endif
 		default:
-			ERROR("not expected type found %ld\n",
+			ERROR("not expected type found %lld\n",
 			      bl2_param->type);
 			break;
 		}

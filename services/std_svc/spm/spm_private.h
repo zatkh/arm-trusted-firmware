@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __SPM_PRIVATE_H__
-#define __SPM_PRIVATE_H__
+#ifndef SPM_PRIVATE_H
+#define SPM_PRIVATE_H
 
 #include <context.h>
 
@@ -29,30 +29,87 @@
 #define SP_C_RT_CTX_SIZE	0x60
 #define SP_C_RT_CTX_ENTRIES	(SP_C_RT_CTX_SIZE >> DWORD_SHIFT)
 
+/* Value returned by spm_sp_synchronous_entry() when a partition is preempted */
+#define SPM_SECURE_PARTITION_PREEMPTED	U(0x1234)
 
 #ifndef __ASSEMBLY__
 
-#include <spinlock.h>
 #include <stdint.h>
-#include <xlat_tables_v2.h>
 
-/* Handle on the Secure partition translation context */
-extern xlat_ctx_t *secure_partition_xlat_ctx_handle;
+#include <lib/xlat_tables/xlat_tables_v2.h>
+#include <lib/spinlock.h>
+#include <services/sp_res_desc.h>
 
-struct entry_point_info;
+typedef enum sp_state {
+	SP_STATE_RESET = 0,
+	SP_STATE_IDLE,
+	SP_STATE_BUSY
+} sp_state_t;
 
-typedef struct secure_partition_context {
+typedef struct sp_context {
+	/* 1 if the partition is present, 0 otherwise */
+	int is_present;
+
+	/* Location of the image in physical memory */
+	unsigned long long image_base;
+	size_t image_size;
+
 	uint64_t c_rt_ctx;
 	cpu_context_t cpu_ctx;
-	unsigned int sp_init_in_progress;
-	spinlock_t lock;
-} secure_partition_context_t;
+	struct sp_res_desc rd;
 
+	/* Translation tables context */
+	xlat_ctx_t *xlat_ctx_handle;
+	spinlock_t xlat_ctx_lock;
+
+	sp_state_t state;
+	spinlock_t state_lock;
+
+	unsigned int request_count;
+	spinlock_t request_count_lock;
+
+	/* Base and size of the shared SPM<->SP buffer */
+	uintptr_t spm_sp_buffer_base;
+	size_t spm_sp_buffer_size;
+	spinlock_t spm_sp_buffer_lock;
+} sp_context_t;
+
+/* Functions used to enter/exit a Secure Partition synchronously */
+uint64_t spm_sp_synchronous_entry(sp_context_t *sp_ctx, int can_preempt);
+__dead2 void spm_sp_synchronous_exit(uint64_t rc);
+
+/* Assembly helpers */
 uint64_t spm_secure_partition_enter(uint64_t *c_rt_ctx);
 void __dead2 spm_secure_partition_exit(uint64_t c_rt_ctx, uint64_t ret);
-void spm_init_sp_ep_state(struct entry_point_info *sp_ep_info,
-			  uint64_t pc,
-			  secure_partition_context_t *sp_ctx_ptr);
+
+/* Secure Partition setup */
+void spm_sp_setup(sp_context_t *sp_ctx);
+
+/* Secure Partition state management helpers */
+void sp_state_set(sp_context_t *sp_ptr, sp_state_t state);
+void sp_state_wait_switch(sp_context_t *sp_ptr, sp_state_t from, sp_state_t to);
+int sp_state_try_switch(sp_context_t *sp_ptr, sp_state_t from, sp_state_t to);
+
+/* Functions to keep track of the number of active requests per SP */
+void spm_sp_request_increase(sp_context_t *sp_ctx);
+void spm_sp_request_decrease(sp_context_t *sp_ctx);
+int spm_sp_request_increase_if_zero(sp_context_t *sp_ctx);
+
+/* Functions related to the translation tables management */
+xlat_ctx_t *spm_sp_xlat_context_alloc(void);
+void sp_map_memory_regions(sp_context_t *sp_ctx);
+
+/* Functions to handle Secure Partition contexts */
+void spm_cpu_set_sp_ctx(unsigned int linear_id, sp_context_t *sp_ctx);
+sp_context_t *spm_cpu_get_sp_ctx(unsigned int linear_id);
+sp_context_t *spm_sp_get_by_uuid(const uint32_t (*svc_uuid)[4]);
+
+/* Functions to manipulate response and requests buffers */
+int spm_response_add(uint16_t client_id, uint16_t handle, uint32_t token,
+		     u_register_t x1, u_register_t x2, u_register_t x3);
+int spm_response_get(uint16_t client_id, uint16_t handle, uint32_t token,
+		     u_register_t *x1, u_register_t *x2, u_register_t *x3);
+
 #endif /* __ASSEMBLY__ */
 
-#endif /* __SPM_PRIVATE_H__ */
+#endif /* SPM_PRIVATE_H */

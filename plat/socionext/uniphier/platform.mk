@@ -6,11 +6,8 @@
 
 override BL2_AT_EL3			:= 1
 override COLD_BOOT_SINGLE_CPU		:= 1
-override ENABLE_PLAT_COMPAT		:= 0
-override LOAD_IMAGE_V2			:= 1
 override PROGRAMMABLE_RESET_ADDRESS	:= 1
 override USE_COHERENT_MEM		:= 1
-override USE_TBBR_DEFS			:= 1
 override ENABLE_SVE_FOR_NS		:= 0
 
 # Cortex-A53 revision r0p4-51rel0
@@ -74,8 +71,6 @@ ifeq (${TRUSTED_BOARD_BOOT},1)
 
 include drivers/auth/mbedtls/mbedtls_crypto.mk
 include drivers/auth/mbedtls/mbedtls_x509.mk
-
-PLAT_INCLUDES		+=	-Iinclude/common/tbbr
 
 BL2_SOURCES		+=	drivers/auth/auth_mod.c			\
 				drivers/auth/crypto_mod.c		\

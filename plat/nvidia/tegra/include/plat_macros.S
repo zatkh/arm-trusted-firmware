@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLAT_MACROS_S__
-#define __PLAT_MACROS_S__
+#ifndef PLAT_MACROS_S
+#define PLAT_MACROS_S
 
-#include <gic_v2.h>
+#include <gicv2.h>
 #include <tegra_def.h>
 
 .section .rodata.gic_reg_name, "aS"
@@ -50,7 +50,7 @@ spacer:
 	bl	asm_print_hex
 	adr	x4, spacer
 	bl	asm_print_str
-	ldr	x4, [x7], #8
+	ldr	w4, [x7], #4
 	bl	asm_print_hex
 	adr	x4, newline
 	bl	asm_print_str
@@ -58,4 +58,4 @@ spacer:
 1:
 .endm
 
-#endif /* __PLAT_MACROS_S__ */
+#endif /* PLAT_MACROS_S */

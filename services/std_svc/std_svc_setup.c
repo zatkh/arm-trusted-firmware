@@ -1,27 +1,32 @@
 /*
- * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <assert.h>
-#include <cpu_data.h>
-#include <debug.h>
-#include <pmf.h>
-#include <psci.h>
-#include <runtime_instr.h>
-#include <runtime_svc.h>
-#include <sdei.h>
-#include <smcc_helpers.h>
-#include <spm_svc.h>
-#include <std_svc.h>
 #include <stdint.h>
-#include <uuid.h>
+
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <lib/el3_runtime/cpu_data.h>
+#include <lib/pmf/pmf.h>
+#include <lib/psci/psci.h>
+#include <lib/runtime_instr.h>
+#include <services/sdei.h>
+#include <services/spm_svc.h>
+#include <services/std_svc.h>
+#include <smccc_helpers.h>
+#include <tools_share/uuid.h>
 
 /* Standard Service UUID */
-DEFINE_SVC_UUID(arm_svc_uid,
-		0x108d905b, 0xf863, 0x47e8, 0xae, 0x2d,
-		0xc0, 0xfb, 0x56, 0x41, 0xf6, 0xe2);
+static uuid_t arm_svc_uid = {
+	{0x5b, 0x90, 0x8d, 0x10},
+	{0x63, 0xf8},
+	{0xe8, 0x47},
+	0xae, 0x2d,
+	{0xc0, 0xfb, 0x56, 0x41, 0xf6, 0xe2}
+};
 
 /* Setup Standard Services */
 static int32_t std_svc_setup(void)
@@ -58,7 +63,7 @@ static int32_t std_svc_setup(void)
  * Top-level Standard Service SMC handler. This handler will in turn dispatch
  * calls to PSCI SMC handler
  */
-uintptr_t std_svc_smc_handler(uint32_t smc_fid,
+static uintptr_t std_svc_smc_handler(uint32_t smc_fid,
 			     u_register_t x1,
 			     u_register_t x2,
 			     u_register_t x3,
@@ -98,7 +103,7 @@ uintptr_t std_svc_smc_handler(uint32_t smc_fid,
 		SMC_RET1(handle, ret);
 	}
 
-#if ENABLE_SPM
+#if ENABLE_SPM && SPM_MM
 	/*
 	 * Dispatch SPM calls to SPM SMC handler and return its return
 	 * value

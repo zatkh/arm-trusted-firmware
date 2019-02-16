@@ -1,23 +1,24 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <arm_config.h>
 #include <assert.h>
-#include <debug.h>
 #include <errno.h>
-#include <gicv3.h>
-#include <mmio.h>
-#include <plat_arm.h>
-#include <platform.h>
-#include <psci.h>
-#include <spe.h>
-#include <v2m_def.h>
-#include "drivers/pwrc/fvp_pwrc.h"
-#include "fvp_def.h"
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/arm/gicv3.h>
+#include <drivers/arm/fvp/fvp_pwrc.h>
+#include <lib/extensions/spe.h>
+#include <lib/mmio.h>
+#include <lib/psci/psci.h>
+#include <plat/arm/common/arm_config.h>
+#include <plat/arm/common/plat_arm.h>
+#include <plat/common/platform.h>
+#include <platform_def.h>
+
 #include "fvp_private.h"
 
 
@@ -74,10 +75,10 @@ static void fvp_cluster_pwrdwn_common(void)
  * support SYSTEM_SUSPEND and it is `faked` in firmware. Hence, for wake up
  * from `fake` system suspend the GIC must not be powered off.
  */
-void arm_gicv3_distif_pre_save(unsigned int proc_num)
+void arm_gicv3_distif_pre_save(unsigned int rdist_proc_num)
 {}
 
-void arm_gicv3_distif_post_restore(unsigned int proc_num)
+void arm_gicv3_distif_post_restore(unsigned int rdist_proc_num)
 {}
 
 static void fvp_power_domain_on_finish_common(const psci_power_state_t *target_state)
@@ -123,7 +124,7 @@ static void fvp_power_domain_on_finish_common(const psci_power_state_t *target_s
 /*******************************************************************************
  * FVP handler called when a CPU is about to enter standby.
  ******************************************************************************/
-void fvp_cpu_standby(plat_local_state_t cpu_state)
+static void fvp_cpu_standby(plat_local_state_t cpu_state)
 {
 
 	assert(cpu_state == ARM_LOCAL_STATE_RET);
@@ -140,7 +141,7 @@ void fvp_cpu_standby(plat_local_state_t cpu_state)
  * FVP handler called when a power domain is about to be turned on. The
  * mpidr determines the CPU to be turned on.
  ******************************************************************************/
-int fvp_pwr_domain_on(u_register_t mpidr)
+static int fvp_pwr_domain_on(u_register_t mpidr)
 {
 	int rc = PSCI_E_SUCCESS;
 	unsigned int psysr;
@@ -152,7 +153,7 @@ int fvp_pwr_domain_on(u_register_t mpidr)
 	 */
 	do {
 		psysr = fvp_pwrc_read_psysr(mpidr);
-	} while (psysr & PSYSR_AFF_L0);
+	} while ((psysr & PSYSR_AFF_L0) != 0U);
 
 	fvp_pwrc_write_pponr(mpidr);
 	return rc;
@@ -162,7 +163,7 @@ int fvp_pwr_domain_on(u_register_t mpidr)
  * FVP handler called when a power domain is about to be turned off. The
  * target_state encodes the power state that each level should transition to.
  ******************************************************************************/
-void fvp_pwr_domain_off(const psci_power_state_t *target_state)
+static void fvp_pwr_domain_off(const psci_power_state_t *target_state)
 {
 	assert(target_state->pwr_domain_state[ARM_PWR_LVL0] ==
 					ARM_LOCAL_STATE_OFF);
@@ -192,7 +193,7 @@ void fvp_pwr_domain_off(const psci_power_state_t *target_state)
  * FVP handler called when a power domain is about to be suspended. The
  * target_state encodes the power state that each level should transition to.
  ******************************************************************************/
-void fvp_pwr_domain_suspend(const psci_power_state_t *target_state)
+static void fvp_pwr_domain_suspend(const psci_power_state_t *target_state)
 {
 	unsigned long mpidr;
 
@@ -241,7 +242,7 @@ void fvp_pwr_domain_suspend(const psci_power_state_t *target_state)
  * being turned off earlier. The target_state encodes the low power state that
  * each level has woken up from.
  ******************************************************************************/
-void fvp_pwr_domain_on_finish(const psci_power_state_t *target_state)
+static void fvp_pwr_domain_on_finish(const psci_power_state_t *target_state)
 {
 	fvp_power_domain_on_finish_common(target_state);
 
@@ -259,7 +260,7 @@ void fvp_pwr_domain_on_finish(const psci_power_state_t *target_state)
  * TODO: At the moment we reuse the on finisher and reinitialize the secure
  * context. Need to implement a separate suspend finisher.
  ******************************************************************************/
-void fvp_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
+static void fvp_pwr_domain_suspend_finish(const psci_power_state_t *target_state)
 {
 	/*
 	 * Nothing to be done on waking up from retention from CPU level.
@@ -311,7 +312,7 @@ static int fvp_node_hw_state(u_register_t target_cpu,
 	 * The format of 'power_level' is implementation-defined, but 0 must
 	 * mean a CPU. We also allow 1 to denote the cluster
 	 */
-	if (power_level != ARM_PWR_LVL0 && power_level != ARM_PWR_LVL1)
+	if ((power_level != ARM_PWR_LVL0) && (power_level != ARM_PWR_LVL1))
 		return PSCI_E_INVALID_PARAMS;
 
 	/*
@@ -323,13 +324,11 @@ static int fvp_node_hw_state(u_register_t target_cpu,
 	if (psysr == PSYSR_INVALID)
 		return PSCI_E_INVALID_PARAMS;
 
-	switch (power_level) {
-	case ARM_PWR_LVL0:
-		ret = (psysr & PSYSR_AFF_L0) ? HW_ON : HW_OFF;
-		break;
-	case ARM_PWR_LVL1:
-		ret = (psysr & PSYSR_AFF_L1) ? HW_ON : HW_OFF;
-		break;
+	if (power_level == ARM_PWR_LVL0) {
+		ret = ((psysr & PSYSR_AFF_L0) != 0U) ? HW_ON : HW_OFF;
+	} else {
+		/* power_level == ARM_PWR_LVL1 */
+		ret = ((psysr & PSYSR_AFF_L1) != 0U) ? HW_ON : HW_OFF;
 	}
 
 	return ret;
@@ -341,13 +340,15 @@ static int fvp_node_hw_state(u_register_t target_cpu,
  * layer. The `fake` SYSTEM_SUSPEND allows us to validate some of the driver
  * save and restore sequences on FVP.
  */
-void fvp_get_sys_suspend_power_state(psci_power_state_t *req_state)
+#if !ARM_BL31_IN_DRAM
+static void fvp_get_sys_suspend_power_state(psci_power_state_t *req_state)
 {
 	unsigned int i;
 
 	for (i = ARM_PWR_LVL0; i <= PLAT_MAX_PWR_LVL; i++)
 		req_state->pwr_domain_state[i] = ARM_LOCAL_STATE_OFF;
 }
+#endif
 
 /*******************************************************************************
  * Handler to filter PSCI requests.
@@ -411,13 +412,12 @@ plat_psci_ops_t plat_arm_psci_pm_ops = {
 	 */
 	.get_sys_suspend_power_state = fvp_get_sys_suspend_power_state,
 #endif
-#if !RESET_TO_BL31 && !RESET_TO_SP_MIN
-	/*
-	 * mem_protect is not supported in RESET_TO_BL31 and RESET_TO_SP_MIN,
-	 * as that would require mapping in all of NS DRAM into BL31 or BL32.
-	 */
 	.mem_protect_chk	= arm_psci_mem_protect_chk,
 	.read_mem_protect	= arm_psci_read_mem_protect,
 	.write_mem_protect	= arm_nor_psci_write_mem_protect,
-#endif
 };
+
+const plat_psci_ops_t *plat_arm_psci_override_pm_ops(plat_psci_ops_t *ops)
+{
+	return ops;
+}

@@ -9,7 +9,6 @@ MTK_PLAT_SOC		:=	${MTK_PLAT}/${PLAT}
 
 PLAT_INCLUDES		:=	-I${MTK_PLAT}/common/				\
 				-I${MTK_PLAT}/common/drivers/uart/		\
-				-Iinclude/plat/arm/common			\
 				-Iinclude/plat/arm/common/aarch64		\
 				-I${MTK_PLAT_SOC}/drivers/crypt/		\
 				-I${MTK_PLAT_SOC}/drivers/mtcmos/		\
@@ -55,11 +54,6 @@ BL31_SOURCES		+=	drivers/arm/cci/cci.c				\
 				${MTK_PLAT_SOC}/plat_topology.c			\
 				${MTK_PLAT_SOC}/power_tracer.c			\
 				${MTK_PLAT_SOC}/scu.c
-
-# Flag used by the MTK_platform port to determine the version of ARM GIC
-# architecture to use for interrupt management in EL3.
-ARM_GIC_ARCH		:=	2
-$(eval $(call add_define,ARM_GIC_ARCH))
 
 # Enable workarounds for selected Cortex-A53 erratas.
 ERRATA_A53_826319	:=	1

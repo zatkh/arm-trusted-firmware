@@ -6,9 +6,8 @@
 
 #include <arch.h>
 #include <asm_macros.S>
-#include <bl_common.h>
+#include <common/bl_common.h>
 #include <el3_common_macros.S>
-
 
 	.globl	bl2_entrypoint
 	.globl	bl2_run_next_image
@@ -77,6 +76,11 @@ func bl2_run_next_image
 	ldr	lr, [r8, #ENTRY_POINT_INFO_PC_OFFSET]
 	ldr	r1, [r8, #(ENTRY_POINT_INFO_PC_OFFSET + 4)]
 	msr	spsr, r1
+
+	/* Some BL32 stages expect lr_svc to provide the BL33 entry address */
+	cps	#MODE32_svc
+	ldr	lr, [r8, #ENTRY_POINT_INFO_LR_SVC_OFFSET]
+	cps	#MODE32_mon
 
 	add	r8, r8, #ENTRY_POINT_INFO_ARGS_OFFSET
 	ldm	r8, {r0, r1, r2, r3}

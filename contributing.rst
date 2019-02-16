@@ -1,13 +1,13 @@
-Contributing to ARM Trusted Firmware
-====================================
+Contributing to Trusted Firmware-A
+==================================
 
 Getting Started
 ---------------
 
 -  Make sure you have a `GitHub account`_.
 -  Create an `issue`_ for your work if one does not already exist. This gives
-   everyone visibility of whether others are working on something similar. ARM
-   licensees may contact ARM directly via their partner managers instead if
+   everyone visibility of whether others are working on something similar. Arm
+   licensees may contact Arm directly via their partner managers instead if
    they prefer.
 
    -  Note that the `issue`_ tracker for this project is in a separate
@@ -27,8 +27,8 @@ Making Changes
 
 -  Make commits of logical units. See these general `Git guidelines`_ for
    contributing to a project.
--  Follow the `Linux coding style`_; this style is enforced for the ARM Trusted
-   Firmware project (style errors only, not warnings).
+-  Follow the `Linux coding style`_; this style is enforced for the TF-A
+   project (style errors only, not warnings).
 
    -  Use the checkpatch.pl script provided with the Linux source tree. A
       Makefile target is provided for convenience (see section 2 in the
@@ -50,19 +50,19 @@ Making Changes
       other in-source documentation needs updating.
    -  Ensure that each changed file has the correct copyright and license
       information. Files that entirely consist of contributions to this
-      project should have the copyright notice and BSD-3-Clause SPDX license
-      identifier as shown in `license.rst`_. Files that contain
-      changes to imported Third Party IP should contain a notice as follows,
-      with the original copyright and license text retained:
+      project should have a copyright notice and BSD-3-Clause SPDX license
+      identifier of the form as shown in `license.rst`_. Files that contain
+      changes to imported Third Party IP files should retain their original
+      copyright and license notices. For significant contributions you may
+      add your own copyright notice in following format:
 
       ::
 
-          Portions copyright (c) [XXXX-]YYYY, ARM Limited and Contributors. All rights reserved.
+          Portions copyright (c) [XXXX-]YYYY, <OWNER>. All rights reserved.
 
       where XXXX is the year of first contribution (if different to YYYY) and
-      YYYY is the year of most recent contribution.
-   -  If not done previously, you may add your name or your company name to
-      the `Acknowledgements`_ file.
+      YYYY is the year of most recent contribution. <OWNER> is your name or
+      your company name.
    -  If you are submitting new files that you intend to be the technical
       sub-maintainer for (for example, a new platform port), then also update
       the `Maintainers`_ file.
@@ -108,7 +108,7 @@ Submitting Changes
 
 --------------
 
-*Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.*
+*Copyright (c) 2013-2018, Arm Limited and Contributors. All rights reserved.*
 
 .. _GitHub account: https://github.com/signup/free
 .. _issue: https://github.com/ARM-software/tf-issues/issues
@@ -116,7 +116,7 @@ Submitting Changes
 .. _Fork: https://help.github.com/articles/fork-a-repo
 .. _arm-trusted-firmware: https://github.com/ARM-software/arm-trusted-firmware
 .. _Git guidelines: http://git-scm.com/book/ch5-2.html
-.. _Linux coding style: https://www.kernel.org/doc/Documentation/CodingStyle
+.. _Linux coding style: https://github.com/torvalds/linux/blob/master/Documentation/process/coding-style.rst
 .. _User Guide: ./docs/user-guide.rst
 .. _automatically closed: https://help.github.com/articles/closing-issues-via-commit-messages
 .. _Porting Guide: ./docs/porting-guide.rst

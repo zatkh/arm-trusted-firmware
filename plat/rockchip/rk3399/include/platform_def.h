@@ -1,18 +1,18 @@
 /*
- * Copyright (c) 2014-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __PLATFORM_DEF_H__
-#define __PLATFORM_DEF_H__
+#ifndef PLATFORM_DEF_H
+#define PLATFORM_DEF_H
 
 #include <arch.h>
-#include <bl31_param.h>
-#include <common_def.h>
-#include <rk3399_def.h>
+#include <lib/utils_def.h>
+#include <plat/common/common_def.h>
 
-#define DEBUG_XLAT_TABLE 0
+#include <bl31_param.h>
+#include <rk3399_def.h>
 
 /*******************************************************************************
  * Platform binary types for linking
@@ -25,9 +25,7 @@
  ******************************************************************************/
 
 /* Size of cacheable stacks */
-#if DEBUG_XLAT_TABLE
-#define PLATFORM_STACK_SIZE 0x800
-#elif defined(IMAGE_BL1)
+#if defined(IMAGE_BL1)
 #define PLATFORM_STACK_SIZE 0x440
 #elif defined(IMAGE_BL2)
 #define PLATFORM_STACK_SIZE 0x400
@@ -57,18 +55,19 @@
  * This macro defines the deepest retention state possible. A higher state
  * id will represent an invalid or a power down state.
  */
-#define PLAT_MAX_RET_STATE		1
+#define PLAT_MAX_RET_STATE		U(1)
 
 /*
  * This macro defines the deepest power down states possible. Any state ID
  * higher than this is invalid.
  */
-#define PLAT_MAX_OFF_STATE		2
+#define PLAT_MAX_OFF_STATE		U(2)
 
 /*******************************************************************************
  * Platform specific page table and MMU setup constants
  ******************************************************************************/
-#define ADDR_SPACE_SIZE		(1ull << 32)
+#define PLAT_VIRT_ADDR_SPACE_SIZE   (1ULL << 32)
+#define PLAT_PHY_ADDR_SPACE_SIZE    (1ULL << 32)
 #define MAX_XLAT_TABLES		20
 #define MAX_MMAP_REGIONS	25
 
@@ -91,14 +90,6 @@
 #define PLAT_RK_GICR_BASE	BASE_GICR_BASE
 #define PLAT_RK_GICC_BASE	0
 
-/*
- * Define a list of Group 1 Secure and Group 0 interrupts as per GICv3
- * terminology. On a GICv2 system or mode, the lists will be merged and treated
- * as Group 0 interrupts.
- */
-#define PLAT_RK_G1S_IRQS		RK3399_G1S_IRQS
-#define PLAT_RK_G0_IRQS			RK3399_G0_IRQS
-
 #define PLAT_RK_UART_BASE		UART2_BASE
 #define PLAT_RK_UART_CLOCK		RK3399_UART_CLOCK
 #define PLAT_RK_UART_BAUDRATE		RK3399_BAUDRATE
@@ -110,4 +101,4 @@
 #define PSRAM_DO_DDR_RESUME	1
 #define PSRAM_CHECK_WAKEUP_CPU	0
 
-#endif /* __PLATFORM_DEF_H__ */
+#endif /* PLATFORM_DEF_H */

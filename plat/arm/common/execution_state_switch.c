@@ -1,18 +1,20 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
-#include <arm_sip_svc.h>
-#include <context.h>
-#include <context_mgmt.h>
-#include <plat_arm.h>
-#include <psci.h>
-#include <smcc_helpers.h>
+#include <stdbool.h>
 #include <string.h>
-#include <utils.h>
+
+#include <arch_helpers.h>
+#include <context.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <lib/psci/psci.h>
+#include <lib/utils.h>
+#include <plat/arm/common/arm_sip_svc.h>
+#include <plat/arm/common/plat_arm.h>
+#include <smccc_helpers.h>
 
 /*
  * Handle SMC from a lower exception level to switch its execution state
@@ -39,7 +41,8 @@ int arm_execution_state_switch(unsigned int smc_fid,
 {
 	/* Execution state can be switched only if EL3 is AArch64 */
 #ifdef AARCH64
-	int caller_64, from_el2, el, endianness, thumb = 0;
+	bool caller_64, thumb = false, from_el2;
+	unsigned int el, endianness;
 	u_register_t spsr, pc, scr, sctlr;
 	entry_point_info_t ep;
 	cpu_context_t *ctx = (cpu_context_t *) handle;
@@ -50,7 +53,7 @@ int arm_execution_state_switch(unsigned int smc_fid,
 	/*
 	 * Disallow state switch if any of the secondaries have been brought up.
 	 */
-	if (psci_secondaries_brought_up())
+	if (psci_secondaries_brought_up() != 0)
 		goto exec_denied;
 
 	spsr = read_ctx_reg(el3_ctx, CTX_SPSR_EL3);
@@ -61,20 +64,20 @@ int arm_execution_state_switch(unsigned int smc_fid,
 		 * If the call originated from AArch64, expect 32-bit pointers when
 		 * switching to AArch32.
 		 */
-		if ((pc_hi != 0) || (cookie_hi != 0))
+		if ((pc_hi != 0U) || (cookie_hi != 0U))
 			goto invalid_param;
 
 		pc = pc_lo;
 
 		/* Instruction state when entering AArch32 */
-		thumb = pc & 1;
+		thumb = (pc & 1U) != 0U;
 	} else {
 		/* Construct AArch64 PC */
 		pc = (((u_register_t) pc_hi) << 32) | pc_lo;
 	}
 
 	/* Make sure PC is 4-byte aligned, except for Thumb */
-	if ((pc & 0x3) && !thumb)
+	if (((pc & 0x3U) != 0U) && !thumb)
 		goto invalid_param;
 
 	/*
@@ -95,7 +98,7 @@ int arm_execution_state_switch(unsigned int smc_fid,
 		 * Disallow switching state if there's a Hypervisor in place;
 		 * this request must be taken up with the Hypervisor instead.
 		 */
-		if (scr & SCR_HCE_BIT)
+		if ((scr & SCR_HCE_BIT) != 0U)
 			goto exec_denied;
 	}
 
@@ -105,23 +108,24 @@ int arm_execution_state_switch(unsigned int smc_fid,
 	 * directly.
 	 */
 	sctlr = from_el2 ? read_sctlr_el2() : read_sctlr_el1();
-	endianness = !!(sctlr & SCTLR_EE_BIT);
+	endianness = ((sctlr & SCTLR_EE_BIT) != 0U) ? 1U : 0U;
 
 	/* Construct SPSR for the exception state we're about to switch to */
 	if (caller_64) {
-		int impl;
+		unsigned long long impl;
 
 		/*
 		 * Switching from AArch64 to AArch32. Ensure this CPU implements
 		 * the target EL in AArch32.
 		 */
-		impl = from_el2 ? EL_IMPLEMENTED(2) : EL_IMPLEMENTED(1);
+		impl = from_el2 ? el_implemented(2) : el_implemented(1);
 		if (impl != EL_IMPL_A64_A32)
 			goto exec_denied;
 
 		/* Return to the equivalent AArch32 privilege level */
 		el = from_el2 ? MODE32_hyp : MODE32_svc;
-		spsr = SPSR_MODE32(el, thumb ? SPSR_T_THUMB : SPSR_T_ARM,
+		spsr = SPSR_MODE32((u_register_t) el,
+				thumb ? SPSR_T_THUMB : SPSR_T_ARM,
 				endianness, DISABLE_ALL_EXCEPTIONS);
 	} else {
 		/*
@@ -130,7 +134,8 @@ int arm_execution_state_switch(unsigned int smc_fid,
 		 * raised), it's safe to assume AArch64 is also implemented.
 		 */
 		el = from_el2 ? MODE_EL2 : MODE_EL1;
-		spsr = SPSR_64(el, MODE_SP_ELX, DISABLE_ALL_EXCEPTIONS);
+		spsr = SPSR_64((u_register_t) el, MODE_SP_ELX,
+				DISABLE_ALL_EXCEPTIONS);
 	}
 
 	/*
@@ -143,10 +148,11 @@ int arm_execution_state_switch(unsigned int smc_fid,
 	 */
 	zeromem(&ep, sizeof(ep));
 	ep.pc = pc;
-	ep.spsr = spsr;
+	ep.spsr = (uint32_t) spsr;
 	SET_PARAM_HEAD(&ep, PARAM_EP, VERSION_1,
-			((endianness ? EP_EE_BIG : EP_EE_LITTLE) | NON_SECURE |
-			 EP_ST_DISABLE));
+			((unsigned int) ((endianness != 0U) ? EP_EE_BIG :
+				EP_EE_LITTLE)
+			 | NON_SECURE | EP_ST_DISABLE));
 
 	/*
 	 * Re-initialize the system register context, and exit EL3 as if for the

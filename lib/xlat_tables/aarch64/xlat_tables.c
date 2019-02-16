@@ -1,19 +1,22 @@
 /*
- * Copyright (c) 2014-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch.h>
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <common_def.h>
+#include <stdint.h>
+
 #include <platform_def.h>
-#include <sys/types.h>
-#include <utils.h>
-#include <xlat_tables.h>
-#include <xlat_tables_arch.h>
+
+#include <arch.h>
+#include <arch_features.h>
+#include <common/bl_common.h>
+#include <lib/utils.h>
+#include <lib/xlat_tables/xlat_tables.h>
+#include <lib/xlat_tables/xlat_tables_arch.h>
+#include <plat/common/common_def.h>
+
 #include "../xlat_tables_private.h"
 
 #define XLAT_TABLE_LEVEL_BASE	\
@@ -31,39 +34,39 @@ static unsigned long long calc_physical_addr_size_bits(
 					unsigned long long max_addr)
 {
 	/* Physical address can't exceed 48 bits */
-	assert((max_addr & ADDR_MASK_48_TO_63) == 0);
+	assert((max_addr & ADDR_MASK_48_TO_63) == 0U);
 
 	/* 48 bits address */
-	if (max_addr & ADDR_MASK_44_TO_47)
+	if ((max_addr & ADDR_MASK_44_TO_47) != 0U)
 		return TCR_PS_BITS_256TB;
 
 	/* 44 bits address */
-	if (max_addr & ADDR_MASK_42_TO_43)
+	if ((max_addr & ADDR_MASK_42_TO_43) != 0U)
 		return TCR_PS_BITS_16TB;
 
 	/* 42 bits address */
-	if (max_addr & ADDR_MASK_40_TO_41)
+	if ((max_addr & ADDR_MASK_40_TO_41) != 0U)
 		return TCR_PS_BITS_4TB;
 
 	/* 40 bits address */
-	if (max_addr & ADDR_MASK_36_TO_39)
+	if ((max_addr & ADDR_MASK_36_TO_39) != 0U)
 		return TCR_PS_BITS_1TB;
 
 	/* 36 bits address */
-	if (max_addr & ADDR_MASK_32_TO_35)
+	if ((max_addr & ADDR_MASK_32_TO_35) != 0U)
 		return TCR_PS_BITS_64GB;
 
 	return TCR_PS_BITS_4GB;
 }
 
 #if ENABLE_ASSERTIONS
-/* Physical Address ranges supported in the AArch64 Memory Model */
+/*
+ * Physical Address ranges supported in the AArch64 Memory Model. Value 0b110 is
+ * supported in ARMv8.2 onwards.
+ */
 static const unsigned int pa_range_bits_arr[] = {
 	PARANGE_0000, PARANGE_0001, PARANGE_0010, PARANGE_0011, PARANGE_0100,
-	PARANGE_0101,
-#if ARM_ARCH_AT_LEAST(8, 2)
-	PARANGE_0110,
-#endif
+	PARANGE_0101, PARANGE_0110
 };
 
 static unsigned long long get_max_supported_pa(void)
@@ -76,23 +79,38 @@ static unsigned long long get_max_supported_pa(void)
 
 	return (1ULL << pa_range_bits_arr[pa_range]) - 1ULL;
 }
+
+/*
+ * Return minimum virtual address space size supported by the architecture
+ */
+static uintptr_t xlat_get_min_virt_addr_space_size(void)
+{
+	uintptr_t ret;
+
+	if (is_armv8_4_ttst_present())
+		ret = MIN_VIRT_ADDR_SPACE_SIZE_TTST;
+	else
+		ret = MIN_VIRT_ADDR_SPACE_SIZE;
+
+	return ret;
+}
 #endif /* ENABLE_ASSERTIONS */
 
-int xlat_arch_current_el(void)
+unsigned int xlat_arch_current_el(void)
 {
-	int el = GET_EL(read_CurrentEl());
+	unsigned int el = (unsigned int)GET_EL(read_CurrentEl());
 
-	assert(el > 0);
+	assert(el > 0U);
 
 	return el;
 }
 
-uint64_t xlat_arch_get_xn_desc(int el)
+uint64_t xlat_arch_get_xn_desc(unsigned int el)
 {
-	if (el == 3) {
+	if (el == 3U) {
 		return UPPER_ATTRS(XN);
 	} else {
-		assert(el == 1);
+		assert(el == 1U);
 		return UPPER_ATTRS(PXN);
 	}
 }
@@ -101,13 +119,19 @@ void init_xlat_tables(void)
 {
 	unsigned long long max_pa;
 	uintptr_t max_va;
+
+	assert(PLAT_VIRT_ADDR_SPACE_SIZE >=
+		(xlat_get_min_virt_addr_space_size() - 1U));
+	assert(PLAT_VIRT_ADDR_SPACE_SIZE <= MAX_VIRT_ADDR_SPACE_SIZE);
+	assert(IS_POWER_OF_TWO(PLAT_VIRT_ADDR_SPACE_SIZE));
+
 	print_mmap();
-	init_xlation_table(0, base_xlation_table, XLAT_TABLE_LEVEL_BASE,
+	init_xlation_table(0U, base_xlation_table, XLAT_TABLE_LEVEL_BASE,
 			   &max_va, &max_pa);
 
-	assert(max_va <= PLAT_VIRT_ADDR_SPACE_SIZE - 1);
-	assert(max_pa <= PLAT_PHY_ADDR_SPACE_SIZE - 1);
-	assert((PLAT_PHY_ADDR_SPACE_SIZE - 1) <= get_max_supported_pa());
+	assert(max_va <= (PLAT_VIRT_ADDR_SPACE_SIZE - 1U));
+	assert(max_pa <= (PLAT_PHY_ADDR_SPACE_SIZE - 1U));
+	assert((PLAT_PHY_ADDR_SPACE_SIZE - 1U) <= get_max_supported_pa());
 
 	tcr_ps_bits = calc_physical_addr_size_bits(max_pa);
 }
@@ -129,7 +153,7 @@ void init_xlat_tables(void)
 		uint32_t sctlr;						\
 									\
 		assert(IS_IN_EL(_el));					\
-		assert((read_sctlr_el##_el() & SCTLR_M_BIT) == 0);	\
+		assert((read_sctlr_el##_el() & SCTLR_M_BIT) == 0U);	\
 									\
 		/* Set attributes in the right indices of the MAIR */	\
 		mair = MAIR_ATTR_SET(ATTR_DEVICE, ATTR_DEVICE_INDEX);	\
@@ -144,16 +168,18 @@ void init_xlat_tables(void)
 									\
 		/* Set TCR bits as well. */				\
 		/* Set T0SZ to (64 - width of virtual address space) */	\
-		if (flags & XLAT_TABLE_NC) {				\
+		int t0sz = 64 - __builtin_ctzll(PLAT_VIRT_ADDR_SPACE_SIZE);\
+									\
+		if ((flags & XLAT_TABLE_NC) != 0U) {			\
 			/* Inner & outer non-cacheable non-shareable. */\
 			tcr = TCR_SH_NON_SHAREABLE |			\
 				TCR_RGN_OUTER_NC | TCR_RGN_INNER_NC |	\
-				(64 - __builtin_ctzll(PLAT_VIRT_ADDR_SPACE_SIZE));\
+				(uint64_t) t0sz;			\
 		} else {						\
 			/* Inner & outer WBWA & shareable. */		\
 			tcr = TCR_SH_INNER_SHAREABLE |			\
 				TCR_RGN_OUTER_WBA | TCR_RGN_INNER_WBA |	\
-				(64 - __builtin_ctzll(PLAT_VIRT_ADDR_SPACE_SIZE));\
+				(uint64_t) t0sz;			\
 		}							\
 		tcr |= _tcr_extra;					\
 		write_tcr_el##_el(tcr);					\
@@ -172,7 +198,7 @@ void init_xlat_tables(void)
 		sctlr = read_sctlr_el##_el();				\
 		sctlr |= SCTLR_WXN_BIT | SCTLR_M_BIT;			\
 									\
-		if (flags & DISABLE_DCACHE)				\
+		if ((flags & DISABLE_DCACHE) != 0U)			\
 			sctlr &= ~SCTLR_C_BIT;				\
 		else							\
 			sctlr |= SCTLR_C_BIT;				\
@@ -181,6 +207,11 @@ void init_xlat_tables(void)
 									\
 		/* Ensure the MMU enable takes effect immediately */	\
 		isb();							\
+	}								\
+									\
+	void enable_mmu_direct_el##_el(unsigned int flags)		\
+	{								\
+		enable_mmu_el##_el(flags);				\
 	}
 
 /* Define EL1 and EL3 variants of the function enabling the MMU */

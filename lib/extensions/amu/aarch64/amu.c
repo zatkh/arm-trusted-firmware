@@ -4,13 +4,15 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <amu.h>
-#include <amu_private.h>
+#include <assert.h>
+#include <stdbool.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <platform.h>
-#include <pubsub_events.h>
+#include <lib/el3_runtime/pubsub_events.h>
+#include <lib/extensions/amu.h>
+#include <lib/extensions/amu_private.h>
+#include <plat/common/platform.h>
 
 #define AMU_GROUP0_NR_COUNTERS	4
 
@@ -21,19 +23,19 @@ struct amu_ctx {
 
 static struct amu_ctx amu_ctxs[PLATFORM_CORE_COUNT];
 
-int amu_supported(void)
+bool amu_supported(void)
 {
 	uint64_t features;
 
 	features = read_id_aa64pfr0_el1() >> ID_AA64PFR0_AMU_SHIFT;
-	return (features & ID_AA64PFR0_AMU_MASK) == 1;
+	return (features & ID_AA64PFR0_AMU_MASK) == 1U;
 }
 
 /*
  * Enable counters.  This function is meant to be invoked
  * by the context management library before exiting from EL3.
  */
-void amu_enable(int el2_unused)
+void amu_enable(bool el2_unused)
 {
 	uint64_t v;
 
@@ -68,7 +70,7 @@ void amu_enable(int el2_unused)
 uint64_t amu_group0_cnt_read(int idx)
 {
 	assert(amu_supported());
-	assert(idx >= 0 && idx < AMU_GROUP0_NR_COUNTERS);
+	assert((idx >= 0) && (idx < AMU_GROUP0_NR_COUNTERS));
 
 	return amu_group0_cnt_read_internal(idx);
 }
@@ -77,7 +79,7 @@ uint64_t amu_group0_cnt_read(int idx)
 void amu_group0_cnt_write(int idx, uint64_t val)
 {
 	assert(amu_supported());
-	assert(idx >= 0 && idx < AMU_GROUP0_NR_COUNTERS);
+	assert((idx >= 0) && (idx < AMU_GROUP0_NR_COUNTERS));
 
 	amu_group0_cnt_write_internal(idx, val);
 	isb();
@@ -87,7 +89,7 @@ void amu_group0_cnt_write(int idx, uint64_t val)
 uint64_t amu_group1_cnt_read(int idx)
 {
 	assert(amu_supported());
-	assert(idx >= 0 && idx < AMU_GROUP1_NR_COUNTERS);
+	assert((idx >= 0) && (idx < AMU_GROUP1_NR_COUNTERS));
 
 	return amu_group1_cnt_read_internal(idx);
 }
@@ -96,7 +98,7 @@ uint64_t amu_group1_cnt_read(int idx)
 void amu_group1_cnt_write(int idx, uint64_t val)
 {
 	assert(amu_supported());
-	assert(idx >= 0 && idx < AMU_GROUP1_NR_COUNTERS);
+	assert((idx >= 0) && (idx < AMU_GROUP1_NR_COUNTERS));
 
 	amu_group1_cnt_write_internal(idx, val);
 	isb();
@@ -109,7 +111,7 @@ void amu_group1_cnt_write(int idx, uint64_t val)
 void amu_group1_set_evtype(int idx, unsigned int val)
 {
 	assert(amu_supported());
-	assert (idx >= 0 && idx < AMU_GROUP1_NR_COUNTERS);
+	assert((idx >= 0) && (idx < AMU_GROUP1_NR_COUNTERS));
 
 	amu_group1_set_evtype_internal(idx, val);
 	isb();
@@ -124,10 +126,10 @@ static void *amu_context_save(const void *arg)
 		return (void *)-1;
 
 	/* Assert that group 0/1 counter configuration is what we expect */
-	assert(read_amcntenset0_el0() == AMU_GROUP0_COUNTERS_MASK &&
-	       read_amcntenset1_el0() == AMU_GROUP1_COUNTERS_MASK);
+	assert((read_amcntenset0_el0() == AMU_GROUP0_COUNTERS_MASK) &&
+	       (read_amcntenset1_el0() == AMU_GROUP1_COUNTERS_MASK));
 
-	assert((sizeof(int) * 8) - __builtin_clz(AMU_GROUP1_COUNTERS_MASK)
+	assert(((sizeof(int) * 8) - __builtin_clz(AMU_GROUP1_COUNTERS_MASK))
 		<= AMU_GROUP1_NR_COUNTERS);
 
 	/*
@@ -146,7 +148,7 @@ static void *amu_context_save(const void *arg)
 	for (i = 0; i < AMU_GROUP1_NR_COUNTERS; i++)
 		ctx->group1_cnts[i] = amu_group1_cnt_read(i);
 
-	return 0;
+	return (void *)0;
 }
 
 static void *amu_context_restore(const void *arg)
@@ -158,26 +160,26 @@ static void *amu_context_restore(const void *arg)
 		return (void *)-1;
 
 	/* Counters were disabled in `amu_context_save()` */
-	assert(read_amcntenset0_el0() == 0 && read_amcntenset1_el0() == 0);
+	assert((read_amcntenset0_el0() == 0U) && (read_amcntenset1_el0() == 0U));
 
-	assert((sizeof(int) * 8) - __builtin_clz(AMU_GROUP1_COUNTERS_MASK)
+	assert(((sizeof(int) * 8U) - __builtin_clz(AMU_GROUP1_COUNTERS_MASK))
 		<= AMU_GROUP1_NR_COUNTERS);
 
 	/* Restore group 0 counters */
 	for (i = 0; i < AMU_GROUP0_NR_COUNTERS; i++)
-		if (AMU_GROUP0_COUNTERS_MASK & (1U << i))
+		if ((AMU_GROUP0_COUNTERS_MASK & (1U << i)) != 0U)
 			amu_group0_cnt_write(i, ctx->group0_cnts[i]);
 
 	/* Restore group 1 counters */
 	for (i = 0; i < AMU_GROUP1_NR_COUNTERS; i++)
-		if (AMU_GROUP1_COUNTERS_MASK & (1U << i))
+		if ((AMU_GROUP1_COUNTERS_MASK & (1U << i)) != 0U)
 			amu_group1_cnt_write(i, ctx->group1_cnts[i]);
 
 	/* Restore group 0/1 counter configuration */
 	write_amcntenset0_el0(AMU_GROUP0_COUNTERS_MASK);
 	write_amcntenset1_el0(AMU_GROUP1_COUNTERS_MASK);
 
-	return 0;
+	return (void *)0;
 }
 
 SUBSCRIBE_TO_EVENT(psci_suspend_pwrdown_start, amu_context_save);

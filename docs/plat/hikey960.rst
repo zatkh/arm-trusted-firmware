@@ -11,7 +11,7 @@ How to build
 Code Locations
 --------------
 
--  ARM Trusted Firmware:
+-  Trusted Firmware-A:
    `link <https://github.com/ARM-software/arm-trusted-firmware>`__
 
 -  OP-TEE:
@@ -73,7 +73,7 @@ Build Procedure
        export EDK2_DIR=${BUILD_PATH}/edk2
        EDK2_OUTPUT_DIR=${EDK2_DIR}/Build/HiKey960/${BUILD_OPTION}_${AARCH64_TOOLCHAIN}
        cd ${EDK2_DIR}
-       # Build UEFI & ARM Trust Firmware
+       # Build UEFI & Trusted Firmware-A
        ${UEFI_TOOLS_DIR}/uefi-build.sh -b ${BUILD_OPTION} -a ../arm-trusted-firmware -s ../optee_os hikey960
 
 -  Generate l-loader.bin and partition table.
@@ -83,6 +83,7 @@ Build Procedure
 
        cd ${BUILD_PATH}/l-loader
        ln -sf ${EDK2_OUTPUT_DIR}/FV/bl1.bin
+       ln -sf ${EDK2_OUTPUT_DIR}/FV/bl2.bin
        ln -sf ${EDK2_OUTPUT_DIR}/FV/fip.bin
        ln -sf ${EDK2_OUTPUT_DIR}/FV/BL33_AP_UEFI.fd
        make hikey960
@@ -130,13 +131,14 @@ Boot UEFI in recovery mode
 -  Fetch that are used in recovery mode. The code location is in below.
    `link <https://github.com/96boards-hikey/tools-images-hikey960>`__
 
--  Generate l-loader.bin.
+-  Prepare recovery binary.
 
    .. code:: shell
 
        $cd tools-images-hikey960
        $ln -sf ${BUILD_PATH}/l-loader/l-loader.bin
        $ln -sf ${BUILD_PATH}/l-loader/fip.bin
+       $ln -sf ${BUILD_PATH}/l-loader/recovery.bin
 
 -  Prepare config file.
 
@@ -146,7 +148,7 @@ Boot UEFI in recovery mode
        # The content of config file
        ./sec_usb_xloader.img 0x00020000
        ./sec_uce_boot.img 0x6A908000
-       ./l-loader.bin 0x1AC00000
+       ./recovery.bin 0x1AC00000
 
 -  Remove the modemmanager package. This package may causes hikey\_idt tool failure.
 
@@ -154,7 +156,7 @@ Boot UEFI in recovery mode
 
        $sudo apt-get purge modemmanager
 
--  Run the command to download l-loader.bin into HiKey960.
+-  Run the command to download recovery.bin into HiKey960.
 
    .. code:: shell
 
@@ -187,4 +189,4 @@ Boot UEFI in normal mode
 
 -  Reference `link <https://github.com/96boards-hikey/tools-images-hikey960/blob/master/build-from-source/README-ATF-UEFI-build-from-source.md>`__
 
-.. _link: http://www.96boards.org/documentation/ConsumerEdition/HiKey960/README.md
+.. _link: https://www.96boards.org/documentation/consumer/hikey/hikey960

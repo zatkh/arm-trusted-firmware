@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2013-2019, ARM Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -22,14 +22,26 @@ ifneq (${ENABLE_STACK_PROTECTOR}, 0)
 JUNO_SECURITY_SOURCES	+=	plat/arm/board/juno/juno_stack_protector.c
 endif
 
+# Select SCMI/SDS drivers instead of SCPI/BOM driver for communicating with the
+# SCP during power management operations and for SCP RAM Firmware transfer.
+CSS_USE_SCMI_SDS_DRIVER		:=	1
+
 PLAT_INCLUDES		:=	-Iplat/arm/board/juno/include
 
-PLAT_BL_COMMON_SOURCES	:=	plat/arm/board/juno/${ARCH}/juno_helpers.S
+PLAT_BL_COMMON_SOURCES	:=	plat/arm/board/juno/${ARCH}/juno_helpers.S \
+				plat/arm/board/juno/juno_common.c
 
 # Flag to enable support for AArch32 state on JUNO
 JUNO_AARCH32_EL3_RUNTIME	:=	0
 $(eval $(call assert_boolean,JUNO_AARCH32_EL3_RUNTIME))
 $(eval $(call add_define,JUNO_AARCH32_EL3_RUNTIME))
+
+# Flag to enable support for TZMP1 on JUNO
+JUNO_TZMP1		:=	0
+$(eval $(call assert_boolean,JUNO_TZMP1))
+ifeq (${JUNO_TZMP1}, 1)
+$(eval $(call add_define,JUNO_TZMP1))
+endif
 
 ifeq (${JUNO_AARCH32_EL3_RUNTIME}, 1)
 # Include BL32 in FIP
@@ -48,25 +60,49 @@ ifeq (${ARCH},aarch64)
 BL1_SOURCES		+=	lib/cpus/aarch64/cortex_a53.S		\
 				lib/cpus/aarch64/cortex_a57.S		\
 				lib/cpus/aarch64/cortex_a72.S		\
-				plat/arm/board/juno/juno_bl1_setup.c	\
 				plat/arm/board/juno/juno_err.c		\
+				plat/arm/board/juno/juno_bl1_setup.c	\
 				${JUNO_INTERCONNECT_SOURCES}		\
 				${JUNO_SECURITY_SOURCES}
 
-BL2_SOURCES		+=	plat/arm/board/juno/juno_err.c		\
+BL2_SOURCES		+=	lib/utils/mem_region.c			\
+				plat/arm/board/juno/juno_err.c		\
 				plat/arm/board/juno/juno_bl2_setup.c	\
+				plat/arm/common/arm_nor_psci_mem_protect.c \
 				${JUNO_SECURITY_SOURCES}
 
 BL2U_SOURCES		+=	${JUNO_SECURITY_SOURCES}
 
-BL31_SOURCES		+=	lib/cpus/aarch64/cortex_a53.S		\
+BL31_SOURCES		+=	drivers/cfi/v2m/v2m_flash.c		\
+				lib/cpus/aarch64/cortex_a53.S		\
 				lib/cpus/aarch64/cortex_a57.S		\
 				lib/cpus/aarch64/cortex_a72.S		\
+				lib/utils/mem_region.c			\
+				plat/arm/board/juno/juno_pm.c		\
 				plat/arm/board/juno/juno_topology.c	\
+				plat/arm/common/arm_nor_psci_mem_protect.c \
 				${JUNO_GIC_SOURCES}			\
 				${JUNO_INTERCONNECT_SOURCES}		\
 				${JUNO_SECURITY_SOURCES}
+
+ifeq (${CSS_USE_SCMI_SDS_DRIVER},1)
+BL1_SOURCES		+=	drivers/arm/css/sds/sds.c
 endif
+
+endif
+
+ifneq (${RESET_TO_BL31},0)
+  $(error "Using BL31 as the reset vector is not supported on ${PLAT} platform. \
+  Please set RESET_TO_BL31 to 0.")
+endif
+
+ifeq ($(USE_ROMLIB),1)
+all : bl1_romlib.bin
+endif
+
+bl1_romlib.bin : $(BUILD_PLAT)/bl1.bin $(BUILD_PLAT)/romlib/romlib.bin
+	@echo "Building combined BL1 and ROMLIB binary for Juno $@"
+	./lib/romlib/gen_combined_bl1_romlib.sh -o bl1_romlib.bin $(BUILD_PLAT)
 
 # Errata workarounds for Cortex-A53:
 ERRATA_A53_826319		:=	1
@@ -93,16 +129,21 @@ ERRATA_A72_859971		:=	0
 # power down sequence
 SKIP_A57_L1_FLUSH_PWR_DWN	:=	 1
 
-# Disable the PSCI platform compatibility layer
-ENABLE_PLAT_COMPAT		:= 	0
-
-# Enable memory map related constants optimisation
-ARM_BOARD_OPTIMISE_MEM		:=	1
-
 # Do not enable SVE
 ENABLE_SVE_FOR_NS		:=	0
 
-include plat/arm/board/common/board_css.mk
+# Enable the dynamic translation tables library.
+ifeq (${ARCH},aarch32)
+    ifeq (${RESET_TO_SP_MIN},1)
+        BL32_CFLAGS	+=	-DPLAT_XLAT_TABLES_DYNAMIC=1
+    endif
+else
+    ifeq (${RESET_TO_BL31},1)
+        BL31_CFLAGS	+=	-DPLAT_XLAT_TABLES_DYNAMIC=1
+    endif
+endif
+
+include plat/arm/board/common/board_common.mk
 include plat/arm/common/arm_common.mk
 include plat/arm/soc/common/soc_css.mk
 include plat/arm/css/common/css_common.mk

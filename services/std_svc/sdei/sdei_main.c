@@ -1,36 +1,35 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <arch_helpers.h>
 #include <assert.h>
-#include <bl31.h>
-#include <bl_common.h>
-#include <cassert.h>
-#include <context.h>
-#include <context_mgmt.h>
-#include <debug.h>
-#include <ehf.h>
-#include <interrupt_mgmt.h>
-#include <platform.h>
-#include <pubsub.h>
-#include <runtime_svc.h>
-#include <sdei.h>
 #include <stddef.h>
 #include <string.h>
-#include <utils.h>
+
+#include <bl31/bl31.h>
+#include <bl31/ehf.h>
+#include <bl31/interrupt_mgmt.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <context.h>
+#include <lib/cassert.h>
+#include <lib/el3_runtime/pubsub.h>
+#include <lib/utils.h>
+#include <plat/common/platform.h>
+#include <services/sdei.h>
+
 #include "sdei_private.h"
 
-#define MAJOR_VERSION	1
-#define MINOR_VERSION	0
-#define VENDOR_VERSION	0
+#define MAJOR_VERSION	1ULL
+#define MINOR_VERSION	0ULL
+#define VENDOR_VERSION	0ULL
 
 #define MAKE_SDEI_VERSION(_major, _minor, _vendor) \
-	((((unsigned long long)(_major)) << 48) | \
-	 (((unsigned long long)(_minor)) << 32) | \
-	 (_vendor))
+	((((_major)) << 48ULL) | (((_minor)) << 32ULL) | (_vendor))
 
 #define LOWEST_INTR_PRIORITY		0xff
 
@@ -48,7 +47,7 @@ static void init_map(sdei_ev_map_t *map)
 }
 
 /* Convert mapping to SDEI class */
-sdei_class_t map_to_class(sdei_ev_map_t *map)
+static sdei_class_t map_to_class(sdei_ev_map_t *map)
 {
 	return is_event_critical(map) ? SDEI_CRITICAL : SDEI_NORMAL;
 }
@@ -65,7 +64,7 @@ static void clear_event_entries(sdei_entry_t *se)
 /* Perform CPU-specific state initialisation */
 static void *sdei_cpu_on_init(const void *arg)
 {
-	int i;
+	unsigned int i;
 	sdei_ev_map_t *map;
 	sdei_entry_t *se;
 
@@ -79,15 +78,27 @@ static void *sdei_cpu_on_init(const void *arg)
 	SDEI_LOG("Private events initialized on %lx\n", read_mpidr_el1());
 
 	/* All PEs start with SDEI events masked */
+	(void) sdei_pe_mask();
+
+	return NULL;
+}
+
+/* CPU initialisation after wakeup from suspend */
+static void *sdei_cpu_wakeup_init(const void *arg)
+{
+	SDEI_LOG("Events masked on %lx\n", read_mpidr_el1());
+
+	/* All PEs wake up with SDEI events masked */
 	sdei_pe_mask();
 
 	return 0;
 }
 
 /* Initialise an SDEI class */
-void sdei_class_init(sdei_class_t class)
+static void sdei_class_init(sdei_class_t class)
 {
-	unsigned int i, zero_found __unused = 0;
+	unsigned int i;
+	bool zero_found __unused = false;
 	int ev_num_so_far __unused;
 	sdei_ev_map_t *map;
 
@@ -111,6 +122,9 @@ void sdei_class_init(sdei_class_t class)
 
 		/* No shared mapping should have signalable property */
 		assert(!is_event_signalable(map));
+
+		/* Shared mappings can't be explicit */
+		assert(!is_map_explicit(map));
 #endif
 
 		/* Skip initializing the wrong priority */
@@ -124,7 +138,7 @@ void sdei_class_init(sdei_class_t class)
 			num_dyn_shrd_slots++;
 		} else {
 			/* Shared mappings must be bound to shared interrupt */
-			assert(plat_ic_is_spi(map->intr));
+			assert(plat_ic_is_spi(map->intr) != 0);
 			set_map_bound(map);
 		}
 
@@ -141,7 +155,7 @@ void sdei_class_init(sdei_class_t class)
 		ev_num_so_far = map->ev_num;
 
 		if (map->ev_num == SDEI_EVENT_0) {
-			zero_found = 1;
+			zero_found = true;
 
 			/* Event 0 must be a Secure SGI */
 			assert(is_secure_sgi(map->intr));
@@ -162,6 +176,16 @@ void sdei_class_init(sdei_class_t class)
 
 		/* Make sure it's a private event */
 		assert(is_event_private(map));
+
+		/*
+		 * Other than priority, explicit events can only have explicit
+		 * and private flags set.
+		 */
+		if (is_map_explicit(map)) {
+			assert((map->map_flags | SDEI_MAPF_CRITICAL) ==
+					(SDEI_MAPF_EXPLICIT | SDEI_MAPF_PRIVATE
+					| SDEI_MAPF_CRITICAL));
+		}
 #endif
 
 		/* Skip initializing the wrong priority */
@@ -174,12 +198,18 @@ void sdei_class_init(sdei_class_t class)
 				assert(map->intr == SDEI_DYN_IRQ);
 				assert(is_event_normal(map));
 				num_dyn_priv_slots++;
+			} else if (is_map_explicit(map)) {
+				/*
+				 * Explicit mappings don't have a backing
+				 * SDEI interrupt, but verify that anyway.
+				 */
+				assert(map->intr == SDEI_DYN_IRQ);
 			} else {
 				/*
 				 * Private mappings must be bound to private
 				 * interrupt.
 				 */
-				assert(plat_ic_is_ppi(map->intr));
+				assert(plat_ic_is_ppi((unsigned) map->intr) != 0);
 				set_map_bound(map);
 			}
 		}
@@ -190,7 +220,7 @@ void sdei_class_init(sdei_class_t class)
 	/* Ensure event 0 is in the mapping */
 	assert(zero_found);
 
-	sdei_cpu_on_init(NULL);
+	(void) sdei_cpu_on_init(NULL);
 }
 
 /* SDEI dispatcher initialisation */
@@ -218,7 +248,7 @@ static void set_sdei_entry(sdei_entry_t *se, uint64_t ep, uint64_t arg,
 	se->reg_flags = flags;
 }
 
-static unsigned long long sdei_version(void)
+static uint64_t sdei_version(void)
 {
 	return MAKE_SDEI_VERSION(MAJOR_VERSION, MINOR_VERSION, VENDOR_VERSION);
 }
@@ -245,17 +275,18 @@ static int validate_flags(uint64_t flags, uint64_t mpidr)
 /* Set routing of an SDEI event */
 static int sdei_event_routing_set(int ev_num, uint64_t flags, uint64_t mpidr)
 {
-	int ret, routing;
+	int ret;
+	unsigned int routing;
 	sdei_ev_map_t *map;
 	sdei_entry_t *se;
 
 	ret = validate_flags(flags, mpidr);
-	if (ret)
+	if (ret != 0)
 		return ret;
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	/* The event must not be private */
@@ -277,11 +308,11 @@ static int sdei_event_routing_set(int ev_num, uint64_t flags, uint64_t mpidr)
 	}
 
 	/* Choose appropriate routing */
-	routing = (flags == SDEI_REGF_RM_ANY) ? INTR_ROUTING_MODE_ANY :
-		INTR_ROUTING_MODE_PE;
+	routing = (unsigned int) ((flags == SDEI_REGF_RM_ANY) ?
+		INTR_ROUTING_MODE_ANY : INTR_ROUTING_MODE_PE);
 
 	/* Update event registration flag */
-	se->reg_flags = flags;
+	se->reg_flags = (unsigned int) flags;
 
 	/*
 	 * ROUTING_SET is permissible only when event composite state is
@@ -297,24 +328,27 @@ finish:
 }
 
 /* Register handler and argument for an SDEI event */
-static int sdei_event_register(int ev_num, uint64_t ep, uint64_t arg,
+static int64_t sdei_event_register(int ev_num, uint64_t ep, uint64_t arg,
 		uint64_t flags, uint64_t mpidr)
 {
 	int ret;
+	unsigned int routing;
 	sdei_entry_t *se;
 	sdei_ev_map_t *map;
 	sdei_state_t backup_state;
 
-	if (!ep || (plat_sdei_validate_entry_point(ep, sdei_client_el()) != 0))
+	if ((ep == 0U) || (plat_sdei_validate_entry_point(
+					ep, sdei_client_el()) != 0)) {
 		return SDEI_EINVAL;
+	}
 
 	ret = validate_flags(flags, mpidr);
-	if (ret)
+	if (ret != 0)
 		return ret;
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	/* Private events always target the PE */
@@ -353,7 +387,7 @@ static int sdei_event_register(int ev_num, uint64_t ep, uint64_t arg,
 
 	if (is_map_bound(map)) {
 		/* Meanwhile, did any PE ACK the interrupt? */
-		if (plat_ic_get_interrupt_active(map->intr))
+		if (plat_ic_get_interrupt_active(map->intr) != 0U)
 			goto fallback;
 
 		/* The interrupt must currently owned by Non-secure */
@@ -386,16 +420,15 @@ static int sdei_event_register(int ev_num, uint64_t ep, uint64_t arg,
 		 * already ensure that shared events get bound to SPIs.
 		 */
 		if (is_event_shared(map)) {
-			plat_ic_set_spi_routing(map->intr,
-					((flags == SDEI_REGF_RM_ANY) ?
-					 INTR_ROUTING_MODE_ANY :
-					 INTR_ROUTING_MODE_PE),
+			routing = (unsigned int) ((flags == SDEI_REGF_RM_ANY) ?
+				INTR_ROUTING_MODE_ANY : INTR_ROUTING_MODE_PE);
+			plat_ic_set_spi_routing(map->intr, routing,
 					(u_register_t) mpidr);
 		}
 	}
 
 	/* Populate event entries */
-	set_sdei_entry(se, ep, arg, flags, mpidr);
+	set_sdei_entry(se, ep, arg, (unsigned int) flags, mpidr);
 
 	/* Increment register count */
 	map->reg_count++;
@@ -414,15 +447,16 @@ fallback:
 }
 
 /* Enable SDEI event */
-static int sdei_event_enable(int ev_num)
+static int64_t sdei_event_enable(int ev_num)
 {
 	sdei_ev_map_t *map;
 	sdei_entry_t *se;
-	int ret, before, after;
+	int ret;
+	bool before, after;
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	se = get_event_entry(map);
@@ -457,11 +491,12 @@ static int sdei_event_disable(int ev_num)
 {
 	sdei_ev_map_t *map;
 	sdei_entry_t *se;
-	int ret, before, after;
+	int ret;
+	bool before, after;
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	se = get_event_entry(map);
@@ -492,17 +527,18 @@ finish:
 }
 
 /* Query SDEI event information */
-static uint64_t sdei_event_get_info(int ev_num, int info)
+static int64_t sdei_event_get_info(int ev_num, int info)
 {
 	sdei_entry_t *se;
 	sdei_ev_map_t *map;
 
-	unsigned int flags, registered;
+	uint64_t flags;
+	bool registered;
 	uint64_t affinity;
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	se = get_event_entry(map);
@@ -558,7 +594,7 @@ static int sdei_event_unregister(int ev_num)
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	se = get_event_entry(map);
@@ -630,7 +666,7 @@ static int sdei_event_status(int ev_num)
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	se = get_event_entry(map);
@@ -644,27 +680,27 @@ static int sdei_event_status(int ev_num)
 	if (is_event_shared(map))
 		sdei_map_unlock(map);
 
-	return state;
+	return (int) state;
 }
 
 /* Bind an SDEI event to an interrupt */
-static int sdei_interrupt_bind(int intr_num)
+static int sdei_interrupt_bind(unsigned int intr_num)
 {
 	sdei_ev_map_t *map;
-	int retry = 1, shared_mapping;
+	bool retry = true, shared_mapping;
 
 	/* SGIs are not allowed to be bound */
-	if (plat_ic_is_sgi(intr_num))
+	if (plat_ic_is_sgi(intr_num) != 0)
 		return SDEI_EINVAL;
 
-	shared_mapping = plat_ic_is_spi(intr_num);
+	shared_mapping = (plat_ic_is_spi(intr_num) != 0);
 	do {
 		/*
 		 * Bail out if there is already an event for this interrupt,
 		 * either platform-defined or dynamic.
 		 */
 		map = find_event_map_by_intr(intr_num, shared_mapping);
-		if (map) {
+		if (map != NULL) {
 			if (is_map_dynamic(map)) {
 				if (is_map_bound(map)) {
 					/*
@@ -685,7 +721,7 @@ static int sdei_interrupt_bind(int intr_num)
 		 * SDEI_DYN_IRQ.
 		 */
 		map = find_event_map_by_intr(SDEI_DYN_IRQ, shared_mapping);
-		if (!map)
+		if (map == NULL)
 			return SDEI_ENOMEM;
 
 		/* The returned mapping must be dynamic */
@@ -709,7 +745,7 @@ static int sdei_interrupt_bind(int intr_num)
 		if (!is_map_bound(map)) {
 			map->intr = intr_num;
 			set_map_bound(map);
-			retry = 0;
+			retry = false;
 		}
 		sdei_map_unlock(map);
 	} while (retry);
@@ -726,7 +762,7 @@ static int sdei_interrupt_release(int ev_num)
 
 	/* Check if valid event number */
 	map = find_event_map(ev_num);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	if (!is_map_dynamic(map))
@@ -756,7 +792,7 @@ static int sdei_interrupt_release(int ev_num)
 		 * Deny release if the interrupt is active, which means it's
 		 * probably being acknowledged and handled elsewhere.
 		 */
-		if (plat_ic_get_interrupt_active(map->intr)) {
+		if (plat_ic_get_interrupt_active(map->intr) != 0U) {
 			ret = SDEI_EDENY;
 			goto finish;
 		}
@@ -784,7 +820,8 @@ finish:
 static int sdei_private_reset(void)
 {
 	sdei_ev_map_t *map;
-	int ret = 0, final_ret = 0, i;
+	int ret = 0, final_ret = 0;
+	unsigned int i;
 
 	/* Unregister all private events */
 	for_each_private_map(i, map) {
@@ -806,7 +843,8 @@ static int sdei_shared_reset(void)
 {
 	const sdei_mapping_t *mapping;
 	sdei_ev_map_t *map;
-	int ret = 0, final_ret = 0, i, j;
+	int ret = 0, final_ret = 0;
+	unsigned int i, j;
 
 	/* Unregister all shared events */
 	for_each_shared_map(i, map) {
@@ -849,17 +887,17 @@ static int sdei_shared_reset(void)
 }
 
 /* Send a signal to another SDEI client PE */
-int sdei_signal(int event, uint64_t target_pe)
+static int sdei_signal(int ev_num, uint64_t target_pe)
 {
 	sdei_ev_map_t *map;
 
 	/* Only event 0 can be signalled */
-	if (event != SDEI_EVENT_0)
+	if (ev_num != SDEI_EVENT_0)
 		return SDEI_EINVAL;
 
 	/* Find mapping for event 0 */
 	map = find_event_map(SDEI_EVENT_0);
-	if (!map)
+	if (map == NULL)
 		return SDEI_EINVAL;
 
 	/* The event must be signalable */
@@ -871,20 +909,20 @@ int sdei_signal(int event, uint64_t target_pe)
 		return SDEI_EINVAL;
 
 	/* Raise SGI. Platform will validate target_pe */
-	plat_ic_raise_el3_sgi(map->intr, (u_register_t) target_pe);
+	plat_ic_raise_el3_sgi((int) map->intr, (u_register_t) target_pe);
 
 	return 0;
 }
 
 /* Query SDEI dispatcher features */
-uint64_t sdei_features(unsigned int feature)
+static uint64_t sdei_features(unsigned int feature)
 {
 	if (feature == SDEI_FEATURE_BIND_SLOTS) {
 		return FEATURE_BIND_SLOTS(num_dyn_priv_slots,
 				num_dyn_shrd_slots);
 	}
 
-	return SDEI_EINVAL;
+	return (uint64_t) SDEI_EINVAL;
 }
 
 /* SDEI top level handler for servicing SMCs */
@@ -899,64 +937,61 @@ uint64_t sdei_smc_handler(uint32_t smc_fid,
 {
 
 	uint64_t x5;
-	int ss = get_interrupt_src_ss(flags);
+	unsigned int ss = (unsigned int) get_interrupt_src_ss(flags);
 	int64_t ret;
-	unsigned int resume = 0;
+	bool resume = false;
+	cpu_context_t *ctx = handle;
+	int ev_num = (int) x1;
 
 	if (ss != NON_SECURE)
-		SMC_RET1(handle, SMC_UNK);
+		SMC_RET1(ctx, SMC_UNK);
 
 	/* Verify the caller EL */
 	if (GET_EL(read_spsr_el3()) != sdei_client_el())
-		SMC_RET1(handle, SMC_UNK);
+		SMC_RET1(ctx, SMC_UNK);
 
 	switch (smc_fid) {
 	case SDEI_VERSION:
 		SDEI_LOG("> VER\n");
-		ret = sdei_version();
-		SDEI_LOG("< VER:%lx\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		ret = (int64_t) sdei_version();
+		SDEI_LOG("< VER:%llx\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_REGISTER:
-		x5 = SMC_GET_GP(handle, CTX_GPREG_X5);
-		SDEI_LOG("> REG(n:%d e:%lx a:%lx f:%x m:%lx)\n", (int) x1,
+		x5 = SMC_GET_GP(ctx, CTX_GPREG_X5);
+		SDEI_LOG("> REG(n:%d e:%llx a:%llx f:%x m:%llx)\n", ev_num,
 				x2, x3, (int) x4, x5);
-		ret = sdei_event_register(x1, x2, x3, x4, x5);
-		SDEI_LOG("< REG:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		ret = sdei_event_register(ev_num, x2, x3, x4, x5);
+		SDEI_LOG("< REG:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_ENABLE:
 		SDEI_LOG("> ENABLE(n:%d)\n", (int) x1);
-		ret = sdei_event_enable(x1);
-		SDEI_LOG("< ENABLE:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		ret = sdei_event_enable(ev_num);
+		SDEI_LOG("< ENABLE:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_DISABLE:
-		SDEI_LOG("> DISABLE(n:%d)\n", (int) x1);
-		ret = sdei_event_disable(x1);
-		SDEI_LOG("< DISABLE:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> DISABLE(n:%d)\n", ev_num);
+		ret = sdei_event_disable(ev_num);
+		SDEI_LOG("< DISABLE:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_CONTEXT:
 		SDEI_LOG("> CTX(p:%d):%lx\n", (int) x1, read_mpidr_el1());
-		ret = sdei_event_context(handle, x1);
-		SDEI_LOG("< CTX:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		ret = sdei_event_context(ctx, (unsigned int) x1);
+		SDEI_LOG("< CTX:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_COMPLETE_AND_RESUME:
-		resume = 1;
-		/* Fall through */
+		resume = true;
+		/* Fallthrough */
 
 	case SDEI_EVENT_COMPLETE:
-		SDEI_LOG("> COMPLETE(r:%d sta/ep:%lx):%lx\n", resume, x1,
-				read_mpidr_el1());
+		SDEI_LOG("> COMPLETE(r:%u sta/ep:%llx):%lx\n",
+				(unsigned int) resume, x1, read_mpidr_el1());
 		ret = sdei_event_complete(resume, x1);
-		SDEI_LOG("< COMPLETE:%lx\n", ret);
+		SDEI_LOG("< COMPLETE:%llx\n", ret);
 
 		/*
 		 * Set error code only if the call failed. If the call
@@ -965,102 +1000,94 @@ uint64_t sdei_smc_handler(uint32_t smc_fid,
 		 * shouldn't be modified. We don't return to the caller in this
 		 * case anyway.
 		 */
-		if (ret)
-			SMC_RET1(handle, ret);
+		if (ret != 0)
+			SMC_RET1(ctx, ret);
 
-		SMC_RET0(handle);
-		break;
+		SMC_RET0(ctx);
 
 	case SDEI_EVENT_STATUS:
-		SDEI_LOG("> STAT(n:%d)\n", (int) x1);
-		ret = sdei_event_status(x1);
-		SDEI_LOG("< STAT:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> STAT(n:%d)\n", ev_num);
+		ret = sdei_event_status(ev_num);
+		SDEI_LOG("< STAT:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_GET_INFO:
-		SDEI_LOG("> INFO(n:%d, %d)\n", (int) x1, (int) x2);
-		ret = sdei_event_get_info(x1, x2);
-		SDEI_LOG("< INFO:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> INFO(n:%d, %d)\n", ev_num, (int) x2);
+		ret = sdei_event_get_info(ev_num, (int) x2);
+		SDEI_LOG("< INFO:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_UNREGISTER:
-		SDEI_LOG("> UNREG(n:%d)\n", (int) x1);
-		ret = sdei_event_unregister(x1);
-		SDEI_LOG("< UNREG:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> UNREG(n:%d)\n", ev_num);
+		ret = sdei_event_unregister(ev_num);
+		SDEI_LOG("< UNREG:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_PE_UNMASK:
 		SDEI_LOG("> UNMASK:%lx\n", read_mpidr_el1());
 		sdei_pe_unmask();
 		SDEI_LOG("< UNMASK:%d\n", 0);
-		SMC_RET1(handle, 0);
-		break;
+		SMC_RET1(ctx, 0);
 
 	case SDEI_PE_MASK:
 		SDEI_LOG("> MASK:%lx\n", read_mpidr_el1());
 		ret = sdei_pe_mask();
-		SDEI_LOG("< MASK:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("< MASK:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_INTERRUPT_BIND:
 		SDEI_LOG("> BIND(%d)\n", (int) x1);
-		ret = sdei_interrupt_bind(x1);
-		SDEI_LOG("< BIND:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		ret = sdei_interrupt_bind((unsigned int) x1);
+		SDEI_LOG("< BIND:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_INTERRUPT_RELEASE:
-		SDEI_LOG("> REL(%d)\n", (int) x1);
-		ret = sdei_interrupt_release(x1);
-		SDEI_LOG("< REL:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> REL(%d)\n", ev_num);
+		ret = sdei_interrupt_release(ev_num);
+		SDEI_LOG("< REL:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_SHARED_RESET:
 		SDEI_LOG("> S_RESET():%lx\n", read_mpidr_el1());
 		ret = sdei_shared_reset();
-		SDEI_LOG("< S_RESET:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("< S_RESET:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_PRIVATE_RESET:
 		SDEI_LOG("> P_RESET():%lx\n", read_mpidr_el1());
 		ret = sdei_private_reset();
-		SDEI_LOG("< P_RESET:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("< P_RESET:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_ROUTING_SET:
-		SDEI_LOG("> ROUTE_SET(n:%d f:%lx aff:%lx)\n", (int) x1, x2, x3);
-		ret = sdei_event_routing_set(x1, x2, x3);
-		SDEI_LOG("< ROUTE_SET:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> ROUTE_SET(n:%d f:%llx aff:%llx)\n", ev_num, x2, x3);
+		ret = sdei_event_routing_set(ev_num, x2, x3);
+		SDEI_LOG("< ROUTE_SET:%lld\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_FEATURES:
-		SDEI_LOG("> FTRS(f:%lx)\n", x1);
-		ret = sdei_features(x1);
-		SDEI_LOG("< FTRS:%lx\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> FTRS(f:%llx)\n", x1);
+		ret = (int64_t) sdei_features((unsigned int) x1);
+		SDEI_LOG("< FTRS:%llx\n", ret);
+		SMC_RET1(ctx, ret);
 
 	case SDEI_EVENT_SIGNAL:
-		SDEI_LOG("> SIGNAL(e:%lx t:%lx)\n", x1, x2);
-		ret = sdei_signal(x1, x2);
-		SDEI_LOG("< SIGNAL:%ld\n", ret);
-		SMC_RET1(handle, ret);
-		break;
+		SDEI_LOG("> SIGNAL(e:%d t:%llx)\n", ev_num, x2);
+		ret = sdei_signal(ev_num, x2);
+		SDEI_LOG("< SIGNAL:%lld\n", ret);
+		SMC_RET1(ctx, ret);
+
 	default:
+		/* Do nothing in default case */
 		break;
 	}
 
 	WARN("Unimplemented SDEI Call: 0x%x\n", smc_fid);
-	SMC_RET1(handle, SMC_UNK);
+	SMC_RET1(ctx, SMC_UNK);
 }
 
 /* Subscribe to PSCI CPU on to initialize per-CPU SDEI configuration */
 SUBSCRIBE_TO_EVENT(psci_cpu_on_finish, sdei_cpu_on_init);
+
+/* Subscribe to PSCI CPU suspend finisher for per-CPU configuration */
+SUBSCRIBE_TO_EVENT(psci_suspend_pwrdown_finish, sdei_cpu_wakeup_init);

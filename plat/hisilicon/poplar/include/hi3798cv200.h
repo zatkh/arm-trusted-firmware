@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __HI3798cv200_H__
-#define __HI3798cv200_H__
+#ifndef HI3798CV200_H
+#define HI3798CV200_H
 
-#include <utils_def.h>
+#include <lib/utils_def.h>
 
 /* PL011 */
 #define PL011_UART0_BASE		(0xF8B00000)
@@ -67,11 +67,11 @@
 
 #define EMMC_DESC_SIZE			U(0x00100000) /* 1MB */
 #define EMMC_INIT_PARAMS(base)				\
-	{	.bus_width = EMMC_BUS_WIDTH_8,		\
+	{	.bus_width = MMC_BUS_WIDTH_8,		\
 		.clk_rate = 25 * 1000 * 1000,		\
 		.desc_base = (base),	\
 		.desc_size = EMMC_DESC_SIZE,		\
-		.flags =  EMMC_FLAG_CMD23,		\
+		.flags =  MMC_FLAG_CMD23,		\
 		.reg_base = REG_BASE_MCI,		\
 	}
 
@@ -102,4 +102,4 @@
 #define HISI_TZPC_BASE			(0xF8A80000)
 #define HISI_TZPC_SEC_ATTR_CTRL		(HISI_TZPC_BASE + 0x10)
 
-#endif	/* __HI3798cv200_H__ */
+#endif /* HI3798CV200_H */

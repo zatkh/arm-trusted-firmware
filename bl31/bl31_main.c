@@ -1,23 +1,25 @@
 /*
- * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2019, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <assert.h>
+#include <string.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <bl31.h>
-#include <bl_common.h>
-#include <console.h>
-#include <context_mgmt.h>
-#include <debug.h>
-#include <ehf.h>
-#include <platform.h>
-#include <pmf.h>
-#include <runtime_instr.h>
-#include <runtime_svc.h>
-#include <string.h>
+#include <bl31/bl31.h>
+#include <bl31/ehf.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <drivers/console.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <lib/pmf/pmf.h>
+#include <lib/runtime_instr.h>
+#include <plat/common/platform.h>
+#include <services/std_svc.h>
 
 #if ENABLE_RUNTIME_INSTRUMENTATION
 PMF_REGISTER_SERVICE_SMC(rt_instr_svc, PMF_RT_INSTR_SVC_ID,
@@ -56,7 +58,7 @@ uintptr_t get_arm_std_svc_args(unsigned int svc_mask)
 /*******************************************************************************
  * Simple function to initialise all BL31 helper libraries.
  ******************************************************************************/
-void bl31_lib_init(void)
+void __init bl31_lib_init(void)
 {
 	cm_init();
 }
@@ -66,7 +68,7 @@ void bl31_lib_init(void)
  * before passing control to the bootloader or an Operating System. This
  * function calls runtime_svc_init() which initializes all registered runtime
  * services. The run time services would setup enough context for the core to
- * swtich to the next exception level. When this function returns, the core will
+ * switch to the next exception level. When this function returns, the core will
  * switch to the programmed exception level via. an ERET.
  ******************************************************************************/
 void bl31_main(void)
@@ -94,17 +96,21 @@ void bl31_main(void)
 	 * decide which is the next image (BL32 or BL33) and how to execute it.
 	 * If the SPD runtime service is present, it would want to pass control
 	 * to BL32 first in S-EL1. In that case, SPD would have registered a
-	 * function to intialize bl32 where it takes responsibility of entering
+	 * function to initialize bl32 where it takes responsibility of entering
 	 * S-EL1 and returning control back to bl31_main. Once this is done we
 	 * can prepare entry into BL33 as normal.
 	 */
 
 	/*
-	 * If SPD had registerd an init hook, invoke it.
+	 * If SPD had registered an init hook, invoke it.
 	 */
-	if (bl32_init) {
+	if (bl32_init != NULL) {
 		INFO("BL31: Initializing BL32\n");
-		(*bl32_init)();
+
+		int32_t rc = (*bl32_init)();
+
+		if (rc == 0)
+			WARN("BL31: BL32 initialization failed\n");
 	}
 	/*
 	 * We are ready to enter the next EL. Prepare entry into the image
@@ -144,7 +150,7 @@ uint32_t bl31_get_next_image_type(void)
  * This function programs EL3 registers and performs other setup to enable entry
  * into the next image after BL31 at the next ERET.
  ******************************************************************************/
-void bl31_prepare_next_image_entry(void)
+void __init bl31_prepare_next_image_entry(void)
 {
 	entry_point_info_t *next_image_info;
 	uint32_t image_type;
@@ -154,9 +160,9 @@ void bl31_prepare_next_image_entry(void)
 	 * Ensure that the build flag to save AArch32 system registers in CPU
 	 * context is not set for AArch64-only platforms.
 	 */
-	if (EL_IMPLEMENTED(1) == EL_IMPL_A64ONLY) {
+	if (el_implemented(1) == EL_IMPL_A64ONLY) {
 		ERROR("EL1 supports AArch64-only. Please set build flag "
-				"CTX_INCLUDE_AARCH32_REGS = 0");
+				"CTX_INCLUDE_AARCH32_REGS = 0\n");
 		panic();
 	}
 #endif
@@ -166,7 +172,7 @@ void bl31_prepare_next_image_entry(void)
 
 	/* Program EL3 registers to enable entry into the next EL */
 	next_image_info = bl31_plat_get_next_image_ep_info(image_type);
-	assert(next_image_info);
+	assert(next_image_info != NULL);
 	assert(image_type == GET_SECURITY_STATE(next_image_info->h.attr));
 
 	INFO("BL31: Preparing for EL3 exit to %s world\n",

@@ -1,25 +1,15 @@
 /*
- * Copyright (c) 2013-2016, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2013-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __BL1_PRIVATE_H__
-#define __BL1_PRIVATE_H__
+#ifndef BL1_PRIVATE_H
+#define BL1_PRIVATE_H
 
-#include <types.h>
+#include <stdint.h>
 
-/*******************************************************************************
- * Declarations of linker defined symbols which will tell us where BL1 lives
- * in Trusted ROM and RAM
- ******************************************************************************/
-extern uintptr_t __BL1_ROM_END__;
-#define BL1_ROM_END (uintptr_t)(&__BL1_ROM_END__)
-
-extern uintptr_t __BL1_RAM_START__;
-extern uintptr_t __BL1_RAM_END__;
-#define BL1_RAM_BASE (uintptr_t)(&__BL1_RAM_START__)
-#define BL1_RAM_LIMIT (uintptr_t)(&__BL1_RAM_END__)
+#include <common/bl_common.h>
 
 /******************************************
  * Function prototypes
@@ -37,4 +27,5 @@ register_t bl1_fwu_smc_handler(unsigned int smc_fid,
 		void *cookie,
 		void *handle,
 		unsigned int flags);
-#endif /* __BL1_PRIVATE_H__ */
+
+#endif /* BL1_PRIVATE_H */

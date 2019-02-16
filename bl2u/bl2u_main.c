@@ -1,20 +1,23 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <assert.h>
+#include <stdint.h>
+
+#include <platform_def.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <auth_mod.h>
-#include <bl1.h>
-#include <bl_common.h>
-#include <console.h>
-#include <debug.h>
-#include <platform.h>
-#include <platform_def.h>
-#include <stdint.h>
+#include <bl1/bl1.h>
+#include <bl2u/bl2u.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <drivers/auth/auth_mod.h>
+#include <drivers/console.h>
+#include <plat/common/platform.h>
 
 /*******************************************************************************
  * This function is responsible to:

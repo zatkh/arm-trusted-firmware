@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <dram.h>
 #include <stdint.h>
 #include <string.h>
-#include <utils.h>
+
+#include <lib/utils.h>
+
+#include <dram.h>
+
 #include "dram_spec_timing.h"
 
 static const uint8_t ddr3_cl_cwl[][7] = {
@@ -1313,6 +1316,9 @@ void dram_get_parameter(struct timing_related_config *timing_config,
 		break;
 	case LPDDR4:
 		lpddr4_get_parameter(timing_config, pdram_timing);
+		break;
+	default:
+		/* Do nothing in default case */
 		break;
 	}
 }

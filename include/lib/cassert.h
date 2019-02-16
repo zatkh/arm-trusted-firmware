@@ -1,11 +1,13 @@
 /*
- * Copyright (c) 2014, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2014-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __CASSERT_H__
-#define __CASSERT_H__
+#ifndef CASSERT_H
+#define CASSERT_H
+
+#include <cdefs.h>
 
 /*******************************************************************************
  * Macro to flag a compile time assertion. It uses the preprocessor to generate
@@ -18,4 +20,4 @@
 #define CASSERT(cond, msg)	\
 	typedef char msg[(cond) ? 1 : -1] __unused
 
-#endif /* __CASSERT_H__ */
+#endif /* CASSERT_H */

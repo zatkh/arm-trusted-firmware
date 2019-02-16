@@ -1,15 +1,18 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <assert.h>
+
 #include <arch.h>
 #include <arch_helpers.h>
-#include <assert.h>
-#include <debug.h>
-#include <gic_common.h>
-#include <interrupt_props.h>
+#include <common/debug.h>
+#include <common/interrupt_props.h>
+#include <drivers/arm/gic_common.h>
+#include <drivers/arm/gicv2.h>
+
 #include "../common/gic_common_private.h"
 #include "gicv2_private.h"
 
@@ -93,61 +96,25 @@ void gicv2_spis_configure_defaults(uintptr_t gicd_base)
 
 	num_ints = gicd_read_typer(gicd_base);
 	num_ints &= TYPER_IT_LINES_NO_MASK;
-	num_ints = (num_ints + 1) << 5;
+	num_ints = (num_ints + 1U) << 5;
 
 	/*
 	 * Treat all SPIs as G1NS by default. The number of interrupts is
 	 * calculated as 32 * (IT_LINES + 1). We do 32 at a time.
 	 */
-	for (index = MIN_SPI_ID; index < num_ints; index += 32)
+	for (index = MIN_SPI_ID; index < num_ints; index += 32U)
 		gicd_write_igroupr(gicd_base, index, ~0U);
 
 	/* Setup the default SPI priorities doing four at a time */
-	for (index = MIN_SPI_ID; index < num_ints; index += 4)
+	for (index = MIN_SPI_ID; index < num_ints; index += 4U)
 		gicd_write_ipriorityr(gicd_base,
 				      index,
 				      GICD_IPRIORITYR_DEF_VAL);
 
 	/* Treat all SPIs as level triggered by default, 16 at a time */
-	for (index = MIN_SPI_ID; index < num_ints; index += 16)
-		gicd_write_icfgr(gicd_base, index, 0);
+	for (index = MIN_SPI_ID; index < num_ints; index += 16U)
+		gicd_write_icfgr(gicd_base, index, 0U);
 }
-
-#if !ERROR_DEPRECATED
-/*******************************************************************************
- * Helper function to configure secure G0 SPIs.
- ******************************************************************************/
-void gicv2_secure_spis_configure(uintptr_t gicd_base,
-				     unsigned int num_ints,
-				     const unsigned int *sec_intr_list)
-{
-	unsigned int index, irq_num;
-
-	/* If `num_ints` is not 0, ensure that `sec_intr_list` is not NULL */
-	assert(num_ints ? (uintptr_t)sec_intr_list : 1);
-
-	for (index = 0; index < num_ints; index++) {
-		irq_num = sec_intr_list[index];
-		if (irq_num >= MIN_SPI_ID) {
-			/* Configure this interrupt as a secure interrupt */
-			gicd_clr_igroupr(gicd_base, irq_num);
-
-			/* Set the priority of this interrupt */
-			gicd_set_ipriorityr(gicd_base,
-					      irq_num,
-					      GIC_HIGHEST_SEC_PRIORITY);
-
-			/* Target the secure interrupts to primary CPU */
-			gicd_set_itargetsr(gicd_base, irq_num,
-					gicv2_get_cpuif_id(gicd_base));
-
-			/* Enable this interrupt */
-			gicd_set_isenabler(gicd_base, irq_num);
-		}
-	}
-
-}
-#endif
 
 /*******************************************************************************
  * Helper function to configure properties of secure G0 SPIs.
@@ -160,7 +127,8 @@ void gicv2_secure_spis_configure_props(uintptr_t gicd_base,
 	const interrupt_prop_t *prop_desc;
 
 	/* Make sure there's a valid property array */
-	assert(interrupt_props_num != 0 ? (uintptr_t) interrupt_props : 1);
+	if (interrupt_props_num != 0U)
+		assert(interrupt_props != NULL);
 
 	for (i = 0; i < interrupt_props_num; i++) {
 		prop_desc = &interrupt_props[i];
@@ -189,56 +157,6 @@ void gicv2_secure_spis_configure_props(uintptr_t gicd_base,
 	}
 }
 
-#if !ERROR_DEPRECATED
-/*******************************************************************************
- * Helper function to configure secure G0 SGIs and PPIs.
- ******************************************************************************/
-void gicv2_secure_ppi_sgi_setup(uintptr_t gicd_base,
-					unsigned int num_ints,
-					const unsigned int *sec_intr_list)
-{
-	unsigned int index, irq_num, sec_ppi_sgi_mask = 0;
-
-	/* If `num_ints` is not 0, ensure that `sec_intr_list` is not NULL */
-	assert(num_ints ? (uintptr_t)sec_intr_list : 1);
-
-	/*
-	 * Disable all SGIs (imp. def.)/PPIs before configuring them. This is a
-	 * more scalable approach as it avoids clearing the enable bits in the
-	 * GICD_CTLR.
-	 */
-	gicd_write_icenabler(gicd_base, 0, ~0);
-
-	/* Setup the default PPI/SGI priorities doing four at a time */
-	for (index = 0; index < MIN_SPI_ID; index += 4)
-		gicd_write_ipriorityr(gicd_base,
-				      index,
-				      GICD_IPRIORITYR_DEF_VAL);
-
-	for (index = 0; index < num_ints; index++) {
-		irq_num = sec_intr_list[index];
-		if (irq_num < MIN_SPI_ID) {
-			/* We have an SGI or a PPI. They are Group0 at reset */
-			sec_ppi_sgi_mask |= 1U << irq_num;
-
-			/* Set the priority of this interrupt */
-			gicd_set_ipriorityr(gicd_base,
-					    irq_num,
-					    GIC_HIGHEST_SEC_PRIORITY);
-		}
-	}
-
-	/*
-	 * Invert the bitmask to create a mask for non-secure PPIs and
-	 * SGIs. Program the GICD_IGROUPR0 with this bit mask.
-	 */
-	gicd_write_igroupr(gicd_base, 0, ~sec_ppi_sgi_mask);
-
-	/* Enable the Group 0 SGIs and PPIs */
-	gicd_write_isenabler(gicd_base, 0, sec_ppi_sgi_mask);
-}
-#endif
-
 /*******************************************************************************
  * Helper function to configure properties of secure G0 SGIs and PPIs.
  ******************************************************************************/
@@ -251,20 +169,21 @@ void gicv2_secure_ppi_sgi_setup_props(uintptr_t gicd_base,
 	const interrupt_prop_t *prop_desc;
 
 	/* Make sure there's a valid property array */
-	assert(interrupt_props_num != 0 ? (uintptr_t) interrupt_props : 1);
+	if (interrupt_props_num != 0U)
+		assert(interrupt_props != NULL);
 
 	/*
 	 * Disable all SGIs (imp. def.)/PPIs before configuring them. This is a
 	 * more scalable approach as it avoids clearing the enable bits in the
 	 * GICD_CTLR.
 	 */
-	gicd_write_icenabler(gicd_base, 0, ~0);
+	gicd_write_icenabler(gicd_base, 0U, ~0U);
 
 	/* Setup the default PPI/SGI priorities doing four at a time */
-	for (i = 0; i < MIN_SPI_ID; i += 4)
+	for (i = 0U; i < MIN_SPI_ID; i += 4U)
 		gicd_write_ipriorityr(gicd_base, i, GICD_IPRIORITYR_DEF_VAL);
 
-	for (i = 0; i < interrupt_props_num; i++) {
+	for (i = 0U; i < interrupt_props_num; i++) {
 		prop_desc = &interrupt_props[i];
 
 		if (prop_desc->intr_num >= MIN_SPI_ID)

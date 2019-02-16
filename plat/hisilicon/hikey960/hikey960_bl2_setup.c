@@ -1,144 +1,50 @@
 /*
- * Copyright (c) 2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2017-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <bl_common.h>
-#include <console.h>
-#include <debug.h>
-#include <desc_image_load.h>
 #include <errno.h>
-#include <generic_delay_timer.h>
-#include <hi3660.h>
-#include <mmio.h>
-#if LOAD_IMAGE_V2
-#ifdef SPD_opteed
-#include <optee_utils.h>
-#endif
-#endif
-#include <platform_def.h>
 #include <string.h>
-#include <ufs.h>
 
+#include <platform_def.h>
+
+#include <arch_helpers.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/desc_image_load.h>
+#include <drivers/arm/pl011.h>
+#include <drivers/delay_timer.h>
+#include <drivers/dw_ufs.h>
+#include <drivers/generic_delay_timer.h>
+#include <drivers/ufs.h>
+#include <lib/mmio.h>
+#ifdef SPD_opteed
+#include <lib/optee_utils.h>
+#endif
+
+#include <hi3660.h>
 #include "hikey960_def.h"
 #include "hikey960_private.h"
 
-/*
- * The next 2 constants identify the extents of the code & RO data region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __RO_START__ and __RO_END__ linker symbols refer to page-aligned addresses.
- */
-#define BL2_RO_BASE (unsigned long)(&__RO_START__)
-#define BL2_RO_LIMIT (unsigned long)(&__RO_END__)
+#define BL2_RW_BASE		(BL_CODE_END)
 
-/*
- * The next 2 constants identify the extents of the coherent memory region.
- * These addresses are used by the MMU setup code and therefore they must be
- * page-aligned.  It is the responsibility of the linker script to ensure that
- * __COHERENT_RAM_START__ and __COHERENT_RAM_END__ linker symbols refer to
- * page-aligned addresses.
- */
-#define BL2_COHERENT_RAM_BASE (unsigned long)(&__COHERENT_RAM_START__)
-#define BL2_COHERENT_RAM_LIMIT (unsigned long)(&__COHERENT_RAM_END__)
-
-static meminfo_t bl2_tzram_layout __aligned(CACHE_WRITEBACK_GRANULE);
-
-#if !LOAD_IMAGE_V2
-
-/*******************************************************************************
- * This structure represents the superset of information that is passed to
- * BL31, e.g. while passing control to it from BL2, bl31_params
- * and other platform specific params
- ******************************************************************************/
-typedef struct bl2_to_bl31_params_mem {
-	bl31_params_t		bl31_params;
-	image_info_t		bl31_image_info;
-	image_info_t		bl32_image_info;
-	image_info_t		bl33_image_info;
-	entry_point_info_t	bl33_ep_info;
-	entry_point_info_t	bl32_ep_info;
-	entry_point_info_t	bl31_ep_info;
-} bl2_to_bl31_params_mem_t;
-
-static bl2_to_bl31_params_mem_t bl31_params_mem;
-
-meminfo_t *bl2_plat_sec_mem_layout(void)
-{
-	return &bl2_tzram_layout;
-}
-
-bl31_params_t *bl2_plat_get_bl31_params(void)
-{
-	bl31_params_t *bl2_to_bl31_params = NULL;
-
-	/*
-	 * Initialise the memory for all the arguments that needs to
-	 * be passed to BL3-1
-	 */
-	memset(&bl31_params_mem, 0, sizeof(bl2_to_bl31_params_mem_t));
-
-	/* Assign memory for TF related information */
-	bl2_to_bl31_params = &bl31_params_mem.bl31_params;
-	SET_PARAM_HEAD(bl2_to_bl31_params, PARAM_BL31, VERSION_1, 0);
-
-	/* Fill BL3-1 related information */
-	bl2_to_bl31_params->bl31_image_info = &bl31_params_mem.bl31_image_info;
-	SET_PARAM_HEAD(bl2_to_bl31_params->bl31_image_info, PARAM_IMAGE_BINARY,
-		VERSION_1, 0);
-
-	/* Fill BL3-2 related information if it exists */
-#ifdef BL32_BASE
-	bl2_to_bl31_params->bl32_ep_info = &bl31_params_mem.bl32_ep_info;
-	SET_PARAM_HEAD(bl2_to_bl31_params->bl32_ep_info, PARAM_EP,
-		VERSION_1, 0);
-	bl2_to_bl31_params->bl32_image_info = &bl31_params_mem.bl32_image_info;
-	SET_PARAM_HEAD(bl2_to_bl31_params->bl32_image_info, PARAM_IMAGE_BINARY,
-		VERSION_1, 0);
-#endif
-
-	/* Fill BL3-3 related information */
-	bl2_to_bl31_params->bl33_ep_info = &bl31_params_mem.bl33_ep_info;
-	SET_PARAM_HEAD(bl2_to_bl31_params->bl33_ep_info,
-		PARAM_EP, VERSION_1, 0);
-
-	/* BL3-3 expects to receive the primary CPU MPID (through x0) */
-	bl2_to_bl31_params->bl33_ep_info->args.arg0 = 0xffff & read_mpidr();
-
-	bl2_to_bl31_params->bl33_image_info = &bl31_params_mem.bl33_image_info;
-	SET_PARAM_HEAD(bl2_to_bl31_params->bl33_image_info, PARAM_IMAGE_BINARY,
-		VERSION_1, 0);
-
-	return bl2_to_bl31_params;
-}
-
-/*******************************************************************************
- * Populate the extents of memory available for loading SCP_BL2 (if used),
- * i.e. anywhere in trusted RAM as long as it doesn't overwrite BL2.
- ******************************************************************************/
-void bl2_plat_get_scp_bl2_meminfo(meminfo_t *scp_bl2_meminfo)
-{
-	hikey960_init_ufs();
-	hikey960_io_setup();
-
-	*scp_bl2_meminfo = bl2_tzram_layout;
-}
-#endif /* LOAD_IMAGE_V2 */
-
+static meminfo_t bl2_el3_tzram_layout;
+static console_pl011_t console;
 extern int load_lpm3(void);
+
+enum {
+	BOOT_MODE_RECOVERY = 0,
+	BOOT_MODE_NORMAL,
+	BOOT_MODE_MASK = 1,
+};
 
 /*******************************************************************************
  * Transfer SCP_BL2 from Trusted RAM using the SCP Download protocol.
  * Return 0 on success, -1 otherwise.
  ******************************************************************************/
-#if LOAD_IMAGE_V2
 int plat_hikey960_bl2_handle_scp_bl2(image_info_t *scp_bl2_image_info)
-#else
-int bl2_plat_handle_scp_bl2(image_info_t *scp_bl2_image_info)
-#endif
 {
 	int i;
 	int *buf;
@@ -174,16 +80,77 @@ int bl2_plat_handle_scp_bl2(image_info_t *scp_bl2_image_info)
 	return 0;
 }
 
-void hikey960_init_ufs(void)
+static void hikey960_ufs_reset(void)
 {
-	ufs_params_t ufs_params;
+	unsigned int data, mask;
+
+	mmio_write_32(CRG_PERDIS7_REG, 1 << 14);
+	mmio_clrbits_32(UFS_SYS_PHY_CLK_CTRL_REG, BIT_SYSCTRL_REF_CLOCK_EN);
+	do {
+		data = mmio_read_32(UFS_SYS_PHY_CLK_CTRL_REG);
+	} while (data & BIT_SYSCTRL_REF_CLOCK_EN);
+	/* use abb clk */
+	mmio_clrbits_32(UFS_SYS_UFS_SYSCTRL_REG, BIT_UFS_REFCLK_SRC_SE1);
+	mmio_clrbits_32(UFS_SYS_PHY_ISO_EN_REG, BIT_UFS_REFCLK_ISO_EN);
+	mmio_write_32(PCTRL_PERI_CTRL3_REG, (1 << 0) | (1 << 16));
+	mdelay(1);
+	mmio_write_32(CRG_PEREN7_REG, 1 << 14);
+	mmio_setbits_32(UFS_SYS_PHY_CLK_CTRL_REG, BIT_SYSCTRL_REF_CLOCK_EN);
+
+	mmio_write_32(CRG_PERRSTEN3_REG, PERI_UFS_BIT);
+	do {
+		data = mmio_read_32(CRG_PERRSTSTAT3_REG);
+	} while ((data & PERI_UFS_BIT) == 0);
+	mmio_setbits_32(UFS_SYS_PSW_POWER_CTRL_REG, BIT_UFS_PSW_MTCMOS_EN);
+	mdelay(1);
+	mmio_setbits_32(UFS_SYS_HC_LP_CTRL_REG, BIT_SYSCTRL_PWR_READY);
+	mmio_write_32(UFS_SYS_UFS_DEVICE_RESET_CTRL_REG,
+		      MASK_UFS_DEVICE_RESET);
+	/* clear SC_DIV_UFS_PERIBUS */
+	mask = SC_DIV_UFS_PERIBUS << 16;
+	mmio_write_32(CRG_CLKDIV17_REG, mask);
+	/* set SC_DIV_UFSPHY_CFG(3) */
+	mask = SC_DIV_UFSPHY_CFG_MASK << 16;
+	data = SC_DIV_UFSPHY_CFG(3);
+	mmio_write_32(CRG_CLKDIV16_REG, mask | data);
+	data = mmio_read_32(UFS_SYS_PHY_CLK_CTRL_REG);
+	data &= ~MASK_SYSCTRL_CFG_CLOCK_FREQ;
+	data |= 0x39;
+	mmio_write_32(UFS_SYS_PHY_CLK_CTRL_REG, data);
+	mmio_clrbits_32(UFS_SYS_PHY_CLK_CTRL_REG, MASK_SYSCTRL_REF_CLOCK_SEL);
+	mmio_setbits_32(UFS_SYS_CLOCK_GATE_BYPASS_REG,
+			MASK_UFS_CLK_GATE_BYPASS);
+	mmio_setbits_32(UFS_SYS_UFS_SYSCTRL_REG, MASK_UFS_SYSCTRL_BYPASS);
+
+	mmio_setbits_32(UFS_SYS_PSW_CLK_CTRL_REG, BIT_SYSCTRL_PSW_CLK_EN);
+	mmio_clrbits_32(UFS_SYS_PSW_POWER_CTRL_REG, BIT_UFS_PSW_ISO_CTRL);
+	mmio_clrbits_32(UFS_SYS_PHY_ISO_EN_REG, BIT_UFS_PHY_ISO_CTRL);
+	mmio_clrbits_32(UFS_SYS_HC_LP_CTRL_REG, BIT_SYSCTRL_LP_ISOL_EN);
+	mmio_write_32(CRG_PERRSTDIS3_REG, PERI_ARST_UFS_BIT);
+	mmio_setbits_32(UFS_SYS_RESET_CTRL_EN_REG, BIT_SYSCTRL_LP_RESET_N);
+	mdelay(1);
+	mmio_write_32(UFS_SYS_UFS_DEVICE_RESET_CTRL_REG,
+		      MASK_UFS_DEVICE_RESET | BIT_UFS_DEVICE_RESET);
+	mdelay(20);
+	mmio_write_32(UFS_SYS_UFS_DEVICE_RESET_CTRL_REG,
+		      0x03300330);
+
+	mmio_write_32(CRG_PERRSTDIS3_REG, PERI_UFS_BIT);
+	do {
+		data = mmio_read_32(CRG_PERRSTSTAT3_REG);
+	} while (data & PERI_UFS_BIT);
+}
+
+static void hikey960_init_ufs(void)
+{
+	dw_ufs_params_t ufs_params;
 
 	memset(&ufs_params, 0, sizeof(ufs_params_t));
 	ufs_params.reg_base = UFS_REG_BASE;
 	ufs_params.desc_base = HIKEY960_UFS_DESC_BASE;
 	ufs_params.desc_size = HIKEY960_UFS_DESC_SIZE;
-	ufs_params.flags = UFS_FLAGS_SKIPINIT;
-	ufs_init(NULL, &ufs_params);
+	hikey960_ufs_reset();
+	dw_ufs_init(&ufs_params);
 }
 
 /*******************************************************************************
@@ -208,7 +175,7 @@ uint32_t hikey960_get_spsr_for_bl33_entry(void)
 	uint32_t spsr;
 
 	/* Figure out what mode we enter the non-secure world in */
-	mode = EL_IMPLEMENTED(2) ? MODE_EL2 : MODE_EL1;
+	mode = (el_implemented(2) != EL_IMPL_NONE) ? MODE_EL2 : MODE_EL1;
 
 	/*
 	 * TODO: Consider the possibility of specifying the SPSR in
@@ -238,7 +205,6 @@ uint32_t hikey960_get_spsr_for_bl33_entry(void)
 }
 #endif /* AARCH32 */
 
-#if LOAD_IMAGE_V2
 int hikey960_bl2_handle_post_image_load(unsigned int image_id)
 {
 	int err = 0;
@@ -285,6 +251,9 @@ int hikey960_bl2_handle_post_image_load(unsigned int image_id)
 		}
 		break;
 #endif
+	default:
+		/* Do nothing in default case */
+		break;
 	}
 
 	return err;
@@ -299,101 +268,8 @@ int bl2_plat_handle_post_image_load(unsigned int image_id)
 	return hikey960_bl2_handle_post_image_load(image_id);
 }
 
-#else /* LOAD_IMAGE_V2 */
-
-struct entry_point_info *bl2_plat_get_bl31_ep_info(void)
-{
-#if DEBUG
-	bl31_params_mem.bl31_ep_info.args.arg1 = HIKEY960_BL31_PLAT_PARAM_VAL;
-#endif
-
-	return &bl31_params_mem.bl31_ep_info;
-}
-
-void bl2_plat_set_bl31_ep_info(image_info_t *image,
-			       entry_point_info_t *bl31_ep_info)
-{
-	SET_SECURITY_STATE(bl31_ep_info->h.attr, SECURE);
-	bl31_ep_info->spsr = SPSR_64(MODE_EL3, MODE_SP_ELX,
-				       DISABLE_ALL_EXCEPTIONS);
-}
-
-/*******************************************************************************
- * Before calling this function BL32 is loaded in memory and its entrypoint
- * is set by load_image. This is a placeholder for the platform to change
- * the entrypoint of BL32 and set SPSR and security state.
- * On Hikey we only set the security state of the entrypoint
- ******************************************************************************/
-#ifdef BL32_BASE
-void bl2_plat_set_bl32_ep_info(image_info_t *bl32_image_info,
-					entry_point_info_t *bl32_ep_info)
-{
-	SET_SECURITY_STATE(bl32_ep_info->h.attr, SECURE);
-	/*
-	 * The Secure Payload Dispatcher service is responsible for
-	 * setting the SPSR prior to entry into the BL32 image.
-	 */
-	bl32_ep_info->spsr = 0;
-}
-
-/*******************************************************************************
- * Populate the extents of memory available for loading BL32
- ******************************************************************************/
-void bl2_plat_get_bl32_meminfo(meminfo_t *bl32_meminfo)
-{
-	/*
-	 * Populate the extents of memory available for loading BL32.
-	 */
-	bl32_meminfo->total_base = BL32_BASE;
-	bl32_meminfo->free_base = BL32_BASE;
-	bl32_meminfo->total_size =
-			(TSP_SEC_MEM_BASE + TSP_SEC_MEM_SIZE) - BL32_BASE;
-	bl32_meminfo->free_size =
-			(TSP_SEC_MEM_BASE + TSP_SEC_MEM_SIZE) - BL32_BASE;
-}
-#endif /* BL32_BASE */
-
-void bl2_plat_set_bl33_ep_info(image_info_t *image,
-			       entry_point_info_t *bl33_ep_info)
-{
-	unsigned long el_status;
-	unsigned int mode;
-
-	/* Figure out what mode we enter the non-secure world in */
-	el_status = read_id_aa64pfr0_el1() >> ID_AA64PFR0_EL2_SHIFT;
-	el_status &= ID_AA64PFR0_ELX_MASK;
-
-	if (el_status)
-		mode = MODE_EL2;
-	else
-		mode = MODE_EL1;
-
-	/*
-	 * TODO: Consider the possibility of specifying the SPSR in
-	 * the FIP ToC and allowing the platform to have a say as
-	 * well.
-	 */
-	bl33_ep_info->spsr = SPSR_64(mode, MODE_SP_ELX,
-				       DISABLE_ALL_EXCEPTIONS);
-	SET_SECURITY_STATE(bl33_ep_info->h.attr, NON_SECURE);
-}
-
-void bl2_plat_flush_bl31_params(void)
-{
-	flush_dcache_range((unsigned long)&bl31_params_mem,
-			   sizeof(bl2_to_bl31_params_mem_t));
-}
-
-void bl2_plat_get_bl33_meminfo(meminfo_t *bl33_meminfo)
-{
-	bl33_meminfo->total_base = DDR_BASE;
-	bl33_meminfo->total_size = DDR_SIZE;
-	bl33_meminfo->free_base = DDR_BASE;
-	bl33_meminfo->free_size = DDR_SIZE;
-}
-#endif /* LOAD_IMAGE_V2 */
-
-void bl2_early_platform_setup(meminfo_t *mem_layout)
+void bl2_el3_early_platform_setup(u_register_t arg1, u_register_t arg2,
+				  u_register_t arg3, u_register_t arg4)
 {
 	unsigned int id, uart_base;
 
@@ -403,22 +279,24 @@ void bl2_early_platform_setup(meminfo_t *mem_layout)
 		uart_base = PL011_UART5_BASE;
 	else
 		uart_base = PL011_UART6_BASE;
-
 	/* Initialize the console to provide early debug support */
-	console_init(uart_base, PL011_UART_CLK_IN_HZ, PL011_BAUDRATE);
-
-	/* Setup the BL2 memory layout */
-	bl2_tzram_layout = *mem_layout;
+	console_pl011_register(uart_base, PL011_UART_CLK_IN_HZ,
+			       PL011_BAUDRATE, &console);
+	/*
+	 * Allow BL2 to see the whole Trusted RAM.
+	 */
+	bl2_el3_tzram_layout.total_base = BL2_RW_BASE;
+	bl2_el3_tzram_layout.total_size = BL31_LIMIT - BL2_RW_BASE;
 }
 
-void bl2_plat_arch_setup(void)
+void bl2_el3_plat_arch_setup(void)
 {
-	hikey960_init_mmu_el1(bl2_tzram_layout.total_base,
-			      bl2_tzram_layout.total_size,
-			      BL2_RO_BASE,
-			      BL2_RO_LIMIT,
-			      BL2_COHERENT_RAM_BASE,
-			      BL2_COHERENT_RAM_LIMIT);
+	hikey960_init_mmu_el3(bl2_el3_tzram_layout.total_base,
+			      bl2_el3_tzram_layout.total_size,
+			      BL_CODE_BASE,
+			      BL_CODE_END,
+			      BL_COHERENT_RAM_BASE,
+			      BL_COHERENT_RAM_END);
 }
 
 void bl2_platform_setup(void)
@@ -429,4 +307,13 @@ void bl2_platform_setup(void)
 		mmio_write_32(WDT0_REG_BASE + WDT_CONTROL_OFFSET, 0);
 		mmio_write_32(WDT0_REG_BASE + WDT_LOCK_OFFSET, 0);
 	}
+	hikey960_clk_init();
+	hikey960_pmu_init();
+	hikey960_regulator_enable();
+	hikey960_tzc_init();
+	hikey960_peri_init();
+	hikey960_pinmux_init();
+	hikey960_gpio_init();
+	hikey960_init_ufs();
+	hikey960_io_setup();
 }

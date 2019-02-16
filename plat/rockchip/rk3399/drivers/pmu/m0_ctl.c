@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <arch_helpers.h>
 #include <assert.h>
-#include <debug.h>
-#include <delay_timer.h>
+
+#include <arch_helpers.h>
+#include <common/debug.h>
+#include <drivers/delay_timer.h>
+#include <lib/mmio.h>
+
 #include <m0_ctl.h>
-#include <mmio.h>
 #include <plat_private.h>
 #include <rk3399_def.h>
 #include <secure.h>
@@ -20,14 +22,6 @@ void m0_init(void)
 	/* secure config for M0 */
 	mmio_write_32(SGRF_BASE + SGRF_PMU_CON(0), WMSK_BIT(7));
 	mmio_write_32(SGRF_BASE + SGRF_SOC_CON(6), WMSK_BIT(12));
-
-	/* set the execute address for M0 */
-	mmio_write_32(SGRF_BASE + SGRF_PMU_CON(3),
-		      BITS_WITH_WMASK((M0_BINCODE_BASE >> 12) & 0xffff,
-				      0xffff, 0));
-	mmio_write_32(SGRF_BASE + SGRF_PMU_CON(7),
-		      BITS_WITH_WMASK((M0_BINCODE_BASE >> 28) & 0xf,
-				      0xf, 0));
 
 	/* document is wrong, PMU_CRU_GATEDIS_CON0 do not need set MASK BIT */
 	mmio_setbits_32(PMUCRU_BASE + PMUCRU_GATEDIS_CON0, 0x02);
@@ -44,6 +38,17 @@ void m0_init(void)
 		      BIT_WITH_WMSK(15) | BITS_WITH_WMASK(0x0, 0x1f, 8));
 
 	mmio_write_32(PMUCRU_BASE + PMUCRU_CLKGATE_CON2, WMSK_BIT(5));
+}
+
+void m0_configure_execute_addr(uintptr_t addr)
+{
+	/* set the execute address for M0 */
+	mmio_write_32(SGRF_BASE + SGRF_PMU_CON(3),
+		      BITS_WITH_WMASK((addr >> 12) & 0xffff,
+				      0xffff, 0));
+	mmio_write_32(SGRF_BASE + SGRF_PMU_CON(7),
+		      BITS_WITH_WMASK((addr >> 28) & 0xf,
+				      0xf, 0));
 }
 
 void m0_start(void)

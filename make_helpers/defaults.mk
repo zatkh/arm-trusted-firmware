@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2016-2017, ARM Limited and Contributors. All rights reserved.
+# Copyright (c) 2016-2019, ARM Limited and Contributors. All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
 #
@@ -9,6 +9,9 @@
 # Makefile, after this file is included. This ensures that the former is better
 # poised to handle dependencies, as all build variables would have a default
 # value by then.
+
+# Use T32 by default
+AARCH32_INSTRUCTION_SET		:= T32
 
 # The AArch32 Secure Payload to be built as BL32 image
 AARCH32_SP			:= none
@@ -20,15 +23,15 @@ ARCH				:= aarch64
 ARM_ARCH_MAJOR			:= 8
 ARM_ARCH_MINOR			:= 0
 
-# Determine the version of ARM GIC architecture to use for interrupt management
-# in EL3. The platform port can change this value if needed.
-ARM_GIC_ARCH			:= 2
-
 # Base commit to perform code check on
 BASE_COMMIT			:= origin/master
 
 # Execute BL2 at EL3
 BL2_AT_EL3			:= 0
+
+# BL2 image is stored in XIP memory, for now, this option is only supported
+# when BL2_AT_EL3 is 1.
+BL2_IN_XIP_MEM			:= 0
 
 # By default, consider that the platform may release several CPUs out of reset.
 # The platform Makefile is free to override this value.
@@ -54,6 +57,16 @@ DEBUG				:= 0
 # Build platform
 DEFAULT_PLAT			:= fvp
 
+# Enable capability to disable authentication dynamically. Only meant for
+# development platforms.
+DYN_DISABLE_AUTH		:= 0
+
+# Build option to enable MPAM for lower ELs
+ENABLE_MPAM_FOR_LOWER_ELS	:= 0
+
+# Flag to Enable Position Independant support (PIE)
+ENABLE_PIE			:= 0
+
 # Flag to enable Performance Measurement Framework
 ENABLE_PMF			:= 0
 
@@ -72,6 +85,9 @@ EL3_EXCEPTION_HANDLING		:= 0
 # Build flag to treat usage of deprecated platform and framework APIs as error.
 ERROR_DEPRECATED		:= 0
 
+# Fault injection support
+FAULT_INJECTION_SUPPORT		:= 0
+
 # Byte alignment that each component in FIP is aligned to
 FIP_ALIGN			:= 0
 
@@ -88,6 +104,10 @@ GENERATE_COT			:= 0
 # default, they are for Secure EL1.
 GICV2_G0_FOR_EL3		:= 0
 
+# Route External Aborts to EL3. Disabled by default; External Aborts are handled
+# by lower ELs.
+HANDLE_EA_EL3_FIRST		:= 0
+
 # Whether system coherency is managed in hardware, without explicit software
 # operations.
 HW_ASSISTED_COHERENCY		:= 0
@@ -95,15 +115,15 @@ HW_ASSISTED_COHERENCY		:= 0
 # Set the default algorithm for the generation of Trusted Board Boot keys
 KEY_ALG				:= rsa
 
-# Flag to enable new version of image loading
-LOAD_IMAGE_V2			:= 0
-
-# Use the new console API that allows registering more than one console instance
-# at once. Use = instead of := to dynamically default to ERROR_DEPRECATED.
-MULTI_CONSOLE_API		= $(ERROR_DEPRECATED)
+# Enable use of the console API allowing multiple consoles to be registered
+# at the same time.
+MULTI_CONSOLE_API		:= 0
 
 # NS timer register save and restore
 NS_TIMER_SWITCH			:= 0
+
+# Include lib/libc in the final image
+OVERRIDE_LIBC			:= 0
 
 # Build PL011 UART driver in minimal generic UART mode
 PL011_GENERIC_UART		:= 0
@@ -115,6 +135,9 @@ PROGRAMMABLE_RESET_ADDRESS	:= 0
 # Flag used to choose the power state format viz Extended State-ID or the
 # Original format.
 PSCI_EXTENDED_STATE_ID		:= 0
+
+# Enable RAS support
+RAS_EXTENSION			:= 0
 
 # By default, BL1 acts as the reset handler, not BL31
 RESET_TO_BL31			:= 0
@@ -129,11 +152,18 @@ SDEI_SUPPORT            	:= 0
 # platform Makefile is free to override this value.
 SEPARATE_CODE_AND_RODATA	:= 0
 
+# If the BL31 image initialisation code is recalimed after use for the secondary
+# cores stack
+RECLAIM_INIT_CODE		:= 0
+
 # SPD choice
 SPD				:= none
 
 # For including the Secure Partition Manager
 ENABLE_SPM			:= 0
+
+# Use the SPM based on MM
+SPM_MM				:= 1
 
 # Flag to introduce an infinite loop in BL1 just before it exits into the next
 # image. This is meant to help debugging the post-BL2 phase.
@@ -142,11 +172,14 @@ SPIN_ON_BL1_EXIT		:= 0
 # Flags to build TF with Trusted Boot support
 TRUSTED_BOARD_BOOT		:= 0
 
-# Build option to choose whether Trusted firmware uses Coherent memory or not.
+# Build option to choose whether Trusted Firmware uses Coherent memory or not.
 USE_COHERENT_MEM		:= 1
 
+# Build option to choose whether Trusted Firmware uses library at ROM
+USE_ROMLIB			:= 0
+
 # Use tbbr_oid.h instead of platform_oid.h
-USE_TBBR_DEFS			= $(ERROR_DEPRECATED)
+USE_TBBR_DEFS			:= 1
 
 # Build verbosity
 V				:= 0

@@ -1,13 +1,13 @@
 /*
- * Copyright (c) 2015, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __UART_16550_H__
-#define __UART_16550_H__
+#ifndef UART_16550_H
+#define UART_16550_H
 
-#include <console.h>
+#include <drivers/console.h>
 
 /* UART16550 Registers */
 #define UARTTX			0x0
@@ -23,6 +23,8 @@
 #define UARTMSR			0x18
 #define UARTSPR			0x1c
 #define UARTCSR			0x20
+/* Some instances have MDR1 defined as well */
+#define UARTMDR1		0x20
 #define UARTRXFIFOCFG		0x24
 #define UARTMIE			0x28
 #define UARTVNDR		0x2c
@@ -73,7 +75,7 @@
 
 #ifndef __ASSEMBLY__
 
-#include <types.h>
+#include <stdint.h>
 
 typedef struct {
 	console_t console;
@@ -91,4 +93,4 @@ int console_16550_register(uintptr_t baseaddr, uint32_t clock, uint32_t baud,
 
 #endif /*__ASSEMBLY__*/
 
-#endif	/* __UART_16550_H__ */
+#endif /* UART_16550_H */

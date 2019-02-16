@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef __MMIO_H__
-#define __MMIO_H__
+#ifndef MMIO_H
+#define MMIO_H
 
 #include <stdint.h>
 
@@ -27,6 +27,13 @@ static inline void mmio_write_16(uintptr_t addr, uint16_t value)
 static inline uint16_t mmio_read_16(uintptr_t addr)
 {
 	return *(volatile uint16_t*)addr;
+}
+
+static inline void mmio_clrsetbits_16(uintptr_t addr,
+				uint16_t clear,
+				uint16_t set)
+{
+	mmio_write_16(addr, (mmio_read_16(addr) & ~clear) | set);
 }
 
 static inline void mmio_write_32(uintptr_t addr, uint32_t value)
@@ -66,4 +73,4 @@ static inline void mmio_clrsetbits_32(uintptr_t addr,
 	mmio_write_32(addr, (mmio_read_32(addr) & ~clear) | set);
 }
 
-#endif /* __MMIO_H__ */
+#endif /* MMIO_H */

@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2015-2017, ARM Limited and Contributors. All rights reserved.
+ * Copyright (c) 2015-2018, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
 #include <platform_def.h>
-#include <xlat_tables_defs.h>
+
+#include <lib/xlat_tables/xlat_tables_defs.h>
 
 OUTPUT_FORMAT(PLATFORM_LINKER_FORMAT)
 OUTPUT_ARCH(PLATFORM_LINKER_ARCH)
@@ -28,14 +29,23 @@ SECTIONS
         *bl2u_entrypoint.o(.text*)
         *(.text*)
         *(.vectors)
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __TEXT_END__ = .;
+     } >RAM
+
+     /* .ARM.extab and .ARM.exidx are only added because Clang need them */
+     .ARM.extab . : {
+        *(.ARM.extab* .gnu.linkonce.armextab.*)
+     } >RAM
+
+     .ARM.exidx . : {
+        *(.ARM.exidx* .gnu.linkonce.armexidx.*)
      } >RAM
 
     .rodata . : {
         __RODATA_START__ = .;
         *(.rodata*)
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __RODATA_END__ = .;
     } >RAM
 #else
@@ -52,7 +62,7 @@ SECTIONS
          * read-only, executable.  No RW data from the next section must
          * creep in.  Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __RO_END__ = .;
     } >RAM
 #endif
@@ -95,7 +105,8 @@ SECTIONS
     /*
      * The xlat_table section is for full, aligned page tables (4K).
      * Removing them from .bss avoids forcing 4K alignment on
-     * the .bss section and eliminates the unecessary zero init
+     * the .bss section. The tables are initialized to zero by the translation
+     * tables library.
      */
     xlat_table (NOLOAD) : {
         *(xlat_table)
@@ -117,7 +128,7 @@ SECTIONS
          * as device memory.  No other unexpected data must creep in.
          * Ensure the rest of the current memory page is unused.
          */
-        . = NEXT(PAGE_SIZE);
+        . = ALIGN(PAGE_SIZE);
         __COHERENT_RAM_END__ = .;
     } >RAM
 #endif

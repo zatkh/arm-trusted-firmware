@@ -5,7 +5,10 @@
 #
 
 TSPD_DIR		:=	services/spd/tspd
+
+ifeq (${ERROR_DEPRECATED},0)
 SPD_INCLUDES		:=	-Iinclude/bl32/tsp
+endif
 
 SPD_SOURCES		:=	services/spd/tspd/tspd_common.c		\
 				services/spd/tspd/tspd_helpers.S	\
@@ -32,16 +35,6 @@ NEED_BL32		:=	yes
 # Flag used to enable routing of non-secure interrupts to EL3 when they are
 # generated while the code is executing in S-EL1/0.
 TSP_NS_INTR_ASYNC_PREEMPT	:=	0
-
-# If TSPD_ROUTE_IRQ_TO_EL3 build flag is defined, use it to define value for
-# TSP_NS_INTR_ASYNC_PREEMPT for backward compatibility.
-ifdef TSPD_ROUTE_IRQ_TO_EL3
-ifeq (${ERROR_DEPRECATED},1)
-$(error "TSPD_ROUTE_IRQ_TO_EL3 is deprecated. Please use the new build flag TSP_NS_INTR_ASYNC_PREEMPT")
-endif
-$(warning "TSPD_ROUTE_IRQ_TO_EL3 is deprecated. Please use the new build flag TSP_NS_INTR_ASYNC_PREEMPT")
-TSP_NS_INTR_ASYNC_PREEMPT	:= ${TSPD_ROUTE_IRQ_TO_EL3}
-endif
 
 ifeq ($(EL3_EXCEPTION_HANDLING),1)
 ifeq ($(TSP_NS_INTR_ASYNC_PREEMPT),0)
